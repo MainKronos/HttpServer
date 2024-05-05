@@ -1,0 +1,14 @@
+{
+  "name": "httpserver",
+  "module": "index.ts",
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "scripts": {
+    "start": "bun run index.ts"
+  },
+  "type": "module"
+}
