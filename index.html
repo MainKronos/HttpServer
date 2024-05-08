@@ -20,64 +20,118 @@
             background-color: rgba(255, 255, 255, 0.1);
             margin: 100px auto 100px auto;
             max-width: 1280px;
-            min-height: calc(100vh - 340px);
+            min-height: calc(100vh - 325px);
             width: 60%;
             border-radius: 5px;
             padding: 10px;
             font-size: larger;
+            overflow: hidden;
         }
 
         header {
             background-color: rgba(255, 255, 255, 0.1);
-            color: #9FA8DA;
-            padding: 5px 50px;
             text-align: center;
+            vertical-align: middle;
+            font-size: 30px;
+            height: 30px;
             box-shadow: 0 1px 2px 0 rgba(0, 0, 0, .14), 0 1px 5px 0 rgba(0, 0, 0, .12), 0 3px 1px -2px rgba(0, 0, 0, .2);
+            border-radius: 0 0 4px 4px;
+            overflow: hidden;
+            color: #9FA8DA;
+            padding: 15px 0;
         }
 
-        li {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-            text-indent: -0.75rem;
+        footer {
+            color: #9FA8DA;
+            overflow: hidden;
+            background-color: rgba(255, 255, 255, 0.1);
+            vertical-align: middle;
+            padding: 15px;
+            font-size: 15px;
+            height: 15px;
+            font-style: italic;
+            border-radius: 4px 4px 0 0;
+            margin-top: 20px;
         }
 
-        li[data-type="directory"]::before {
-            content: '📁 ';
+        a {
+            text-decoration: none;
         }
 
-        li[data-type="file"]::before {
-            content: '📄 ';
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        td {
+            border-top: 2px solid rgba(0, 0, 0, .14);
+        }
+
+        td:not(:last-child), th:not(:last-child) {
+            border-right: 2px solid rgba(0, 0, 0, .14);
+        }
+
+        tr > td:nth-of-type(2), tr > td:nth-of-type(3){
+            text-align: center;
+        }
+
+        tr > td:nth-of-type(1){
+            white-space: nowrap;
         }
 
     </style>
     <script>
         window.addEventListener('load', async function () {
             document.title = window.location.pathname;
-            document.querySelector("h1").innerText = window.location.pathname;
+            document.querySelector("header").innerText = window.location.pathname;
 
             const res = await fetch(window.location.href, { method: "POST" });
+
             for (const file of await res.json()) {
-                const li = document.createElement('li');
-                const a = document.createElement('a');
-                a.innerText = file.name;
+                const tr = document.createElement('tr');
+                let td;
+                let a;
+
+                td = document.createElement('td');
+                a = document.createElement('a');
+                a.innerText = (file.type === "file" ? '📄 ' : '📁 ') + file.name;
                 a.href = file.path;
-                li.appendChild(a);
-                li.setAttribute("data-type", file.type);
-                document.querySelector("ul").appendChild(li);
+                td.appendChild(a);
+                tr.appendChild(td);
+
+                td = document.createElement('td');
+                td.innerText = file.size;
+                tr.appendChild(td);
+
+                td = document.createElement('td');
+                td.innerText = file.mtime ? new Date(file.mtime).toLocaleString() : null;
+                tr.appendChild(td);
+
+                document.querySelector("tbody").appendChild(tr);
             }
         });
     </script>
 </head>
 
 <body>
-    <header>
-        <h1></h1>
-    </header>
+    <header></header>
 
     <main>
-        <ul></ul>
+        <table>
+            <thead>
+                <tr>
+                    <th scope="col">Name</th>
+                    <th scope="col">Size</th>
+                    <th scope="col">Date Modified</th>
+                </tr>
+            </thead>
+            <tbody>
+
+            </tbody>
+        </table>
     </main>
+
+    <footer>Made by Lorenzo Chesi</footer>
 </body>
 
 </html>
