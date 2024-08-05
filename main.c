@@ -4,13 +4,12 @@
 
 
 int main(void) {
-	struct Server server;
+	struct HttpServer server;
 
-	if(server_init(&server, NULL, 8080)) return -1;
-	if(server_add_handler(&server, &index_handler)) return -1;
-	if(server_add_handler(&server, &test_handler)) return -1;
-	if(server_run(&server)) return -1;
+	if(http_server_init(&server, NULL, 8080)) return -1;
+	if(http_server_add_handler(&server, "/", html_index_callback)) return -1;
+	if(http_server_add_handler(&server, "/test/", html_test_callback)) return -1;
+	if(http_server_run(&server)) return -1;
 
-	
 	return 0;
 }

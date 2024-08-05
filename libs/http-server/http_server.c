@@ -8,9 +8,11 @@
 #include <pthread.h>
 #include <errno.h>
 
+/* Struttura di contesto del thread */
 struct ThreadCtx {
     int socket; /* socket di invio/ricezione tcp */
-    const struct HttpHandlerCtx* handlers; /* array con tutti gli handlers */
+    const struct HttpHandler* handlers; /* array con tutti gli handlers */
+    HttpCallback callback; /* callback che ha fatto match */
 };
 
 void* socketHandler(void* arg);
@@ -43,9 +45,7 @@ int http_server_init(struct HttpServer* this, const char* address, uint16_t port
 		return -1;
 	}
 
-	/* Inizio dell'ascolto, coda da 5 connessioni */
-    this->queue_len = 5;
-	ret = listen(this->listener, this->queue_len);
+	ret = listen(this->listener, 5);
 	if (ret < 0){
 		perror("Errore in fase di listen");
 		return -1;
@@ -85,7 +85,7 @@ int http_server_run(struct HttpServer* this){
 			ret = -1;
 			break;
 		}
-        ctx->handlers = this->handler_list;
+        ctx->handlers = this->handlers;
 		printf("Nuova connessione da %s:%d\r\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
 
 		/* Creazione thread per la gestione della connessione */
@@ -100,15 +100,16 @@ int http_server_run(struct HttpServer* this){
 	return ret;
 }
 
-int http_server_add_handler(struct HttpServer* this, const struct HttpHandler* handler){
+int http_server_add_handler(struct HttpServer* this, const char* url, HttpCallback callback){
     /* Check iniziali */
     if(this == NULL) return -1;
 
     for(int i=0; i<MAX_HANDLERS; i++){
         // se ho trovato uno slot libero
-        if(!this->handler_list[i].valid){
-            this->handler_list[i].valid = true;
-            memcpy(&this->handler_list[i].handler, handler, sizeof(*handler));
+        if(!this->handlers[i].valid){
+            this->handlers[i].valid = true;
+            strncpy(this->handlers[i].url, url, sizeof(this->handlers[i].url));
+            this->handlers[i].callback = callback;
             return 0;
         }
     }
@@ -116,13 +117,10 @@ int http_server_add_handler(struct HttpServer* this, const struct HttpHandler* h
     return -1;
 }
 
-struct ThreadData {
-    HttpCallback callback; /* callback che ha fatto match */
-    const struct HttpHandlerCtx* handlers; /* array con tutti gli handlers */
-};
-
 int on_url(http_parser* parser, const char *at, size_t length){
-    struct ThreadData* ctx = (struct ThreadData*)parser->data;
+    struct sockaddr_in cl_addr; /* Indirizzo client */
+	socklen_t addrlen = sizeof(cl_addr);
+    struct ThreadCtx* ctx = (struct ThreadCtx*)parser->data;
     struct http_parser_url parser_url;
     int ret;
 
@@ -131,16 +129,18 @@ int on_url(http_parser* parser, const char *at, size_t length){
     ret = http_parser_parse_url(at, length, false, &parser_url);
     if(ret != 0) return -1;
 
-    printf("%s %.*s\n", http_method_str(parser->method), length, at);
+    getpeername(ctx->socket, (struct sockaddr *)&cl_addr, (int*)&addrlen);
+
+    printf("%s:%d %s %.*s\n", inet_ntoa(cl_addr.sin_addr), ntohs(cl_addr.sin_port), http_method_str(parser->method), length, at);
 
     /* scorro tutti gli handler */
     for(int i=0; i<MAX_HANDLERS; i++){
         /* se lo slot è valido */
         if(ctx->handlers[i].valid){
-            ret = strncmp(ctx->handlers[i].handler.url, at + parser_url.field_data[UF_PATH].off, parser_url.field_data[UF_PATH].len);
+            ret = strncmp(ctx->handlers[i].url, at + parser_url.field_data[UF_PATH].off, parser_url.field_data[UF_PATH].len);
             if(ret != 0) continue;
 
-            ctx->callback = ctx->handlers[i].handler.callback;
+            ctx->callback = ctx->handlers[i].callback;
             return 0;
         }
     }
@@ -151,7 +151,6 @@ void* socketHandler(void* arg) {
     struct ThreadCtx* ctx = ((struct ThreadCtx*)arg); /* contesto del thread */
 	struct sockaddr_in cl_addr; /* Indirizzo client */
 	socklen_t addrlen;
-    struct ThreadData data;
     char request[1024];
     char response[1024];
     ssize_t recved, parsed;
@@ -170,16 +169,14 @@ void* socketHandler(void* arg) {
 
 	while(1){
         /* setup */
-        memset(&data, 0, sizeof(data));
-        data.callback = NULL;
-        data.handlers = ctx->handlers;
+        ctx->callback = NULL;
 
         recved = 0;
         response_size = sizeof(response);
 
         // inizializzo il parser
         http_parser_init(&parser, HTTP_REQUEST);
-        parser.data = (void*)&data; // passo il buffer dei dati al parser
+        parser.data = (void*)ctx; // passo il buffer dei dati al parser
 
         // ricevo i dati senza toglierli dallo stream
         recved = recv(ctx->socket, request, sizeof(request), MSG_PEEK);
@@ -195,15 +192,15 @@ void* socketHandler(void* arg) {
         parsed = http_parser_execute(&parser, &settings, request, recved);
 
         // se è stato trovato un handler
-        if(data.callback != NULL){
-            ret = data.callback(ctx->socket);
+        if(ctx->callback != NULL){
+            ret = ctx->callback(ctx->socket);
             if(ret != 0){
                 break; // chiudo la connessione
             }else{
                 continue; // continuo alla prossima richiesta
             }
         }else /* se non è stato trovato un handler */
-        if(HTTP_PARSER_ERRNO(&parser) == HPE_CB_url || data.callback == NULL){
+        if(HTTP_PARSER_ERRNO(&parser) == HPE_CB_url || ctx->callback == NULL){
             strncpy(response, 
                 "HTTP/1.1 404 Not Found\r\n"
                 "Content-Type: text/html; charset=utf-8\r\n"

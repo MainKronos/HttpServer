@@ -14,9 +14,6 @@
 IMPORT_FILE(LOCAL_PATH "index.html", html_page);
 IMPORT_FILE(LOCAL_PATH "file.bin", bin_file);
 
-const struct HttpHandler index_handler = {"/", html_index_callback};
-const struct HttpHandler test_handler = {"/test/", html_test_callback};
-
 int html_index_callback(int socket){
     int ret = 0;
     char buffer[1024];
