@@ -1,23 +1,11 @@
 {
     "tasks": [
         {
-            "type": "cppbuild",
-            "label": "C/C++: gcc build active file",
-            "command": "/usr/bin/gcc",
-            "args": [
-                "-fdiagnostics-color=always",
-                "-g",
-                "${file}",
-                "${fileDirname}/index.c",
-                "${fileDirname}/libs/http-parser/http_parser.c",
-                "${fileDirname}/libs/http-server/http_server.c",
-                "-o",
-                "${fileDirname}/${fileBasenameNoExtension}",
-                "-Ilibs/http-parser",
-                "-Ilibs/http-server"
-            ],
+            "type": "shell",
+            "label": "C/C++: makefile",
+            "command": "make",
             "options": {
-                "cwd": "${fileDirname}"
+                "cwd": "${workspaceFolder}"
             },
             "problemMatcher": [
                 "$gcc"

@@ -16,8 +16,8 @@ IMPORT_FILE(LOCAL_PATH "style.css", css_style);
 IMPORT_FILE(LOCAL_PATH "script.js", js_script);
 IMPORT_FILE(LOCAL_PATH "file.bin", bin_file);
 
-int js_script_callback(int socket){
-    int ret = 0;
+int js_script_callback(int socket, void*){
+    ssize_t ret = 0;
     char buffer[1024];
 
     // svuoto il buffer perchè non mi serve
@@ -28,7 +28,7 @@ int js_script_callback(int socket){
         sizeof(buffer), 
         "HTTP/1.1 200 OK\r\n"
         "Content-Type: text/javascript; charset=utf-8\r\n"
-        "Content-Length: %d\r\n"
+        "Content-Length: %ld\r\n"
         "Connection: keep-alive\r\n"
         "\r\n",
         _sizeof_js_script
@@ -42,11 +42,11 @@ int js_script_callback(int socket){
         int tmp = send(socket, js_script + ret, _sizeof_js_script-ret, 0);
         if(tmp<0) return -1;
         ret += tmp;
-    }while (ret != _sizeof_js_script);
+    }while ((size_t)ret != _sizeof_js_script);
     return 0;
 }
 
-int css_style_callback(int socket){
+int css_style_callback(int socket, void*){
     int ret = 0;
     char buffer[1024];
 
@@ -58,7 +58,7 @@ int css_style_callback(int socket){
         sizeof(buffer), 
         "HTTP/1.1 200 OK\r\n"
         "Content-Type: text/css; charset=utf-8\r\n"
-        "Content-Length: %d\r\n"
+        "Content-Length: %ld\r\n"
         "Connection: keep-alive\r\n"
         "\r\n",
         _sizeof_css_style
@@ -72,11 +72,11 @@ int css_style_callback(int socket){
         int tmp = send(socket, css_style + ret, _sizeof_css_style-ret, 0);
         if(tmp<0) return -1;
         ret += tmp;
-    }while (ret != _sizeof_css_style);
+    }while ((size_t)ret != _sizeof_css_style);
     return 0;
 }
 
-int html_index_callback(int socket){
+int html_index_callback(int socket, void*){
     int ret = 0;
     char buffer[1024];
 
@@ -88,7 +88,7 @@ int html_index_callback(int socket){
         sizeof(buffer), 
         "HTTP/1.1 200 OK\r\n"
         "Content-Type: text/html; charset=utf-8\r\n"
-        "Content-Length: %d\r\n"
+        "Content-Length: %ld\r\n"
         "Connection: keep-alive\r\n"
         "\r\n",
         _sizeof_html_page
@@ -102,11 +102,11 @@ int html_index_callback(int socket){
         int tmp = send(socket, html_page + ret, _sizeof_html_page-ret, 0);
         if(tmp<0) return -1;
         ret += tmp;
-    }while (ret != _sizeof_html_page);
+    }while ((size_t)ret != _sizeof_html_page);
     return 0;
 }
 
-int html_test_callback(int socket){
+int html_test_callback(int socket, void*){
     int ret = 0;
     char buffer[1024];
 
@@ -117,7 +117,7 @@ int html_test_callback(int socket){
         sizeof(buffer), 
         "HTTP/1.1 200 OK\r\n"
         "Content-Type: application/octet-stream; charset=utf-8\r\n"
-        "Content-Length: %d\r\n"
+        "Content-Length: %ld\r\n"
         "Connection: keep-alive\r\n"
         "\r\n",
         _sizeof_bin_file
@@ -133,7 +133,7 @@ int html_test_callback(int socket){
         int tmp = send(socket, bin_file+ret, _sizeof_bin_file-ret, 0);
         if(tmp<0) return -1;
         ret += tmp;
-    }while (ret != _sizeof_bin_file);
+    }while ((size_t)ret != _sizeof_bin_file);
     
     return 0;
 }

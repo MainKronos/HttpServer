@@ -60,28 +60,45 @@ __asm__( \
 extern __attribute__((aligned(16))) const size_t _sizeof_ ## sym; \
 extern __attribute__((aligned(16))) const char sym[]
 
-typedef int(*HttpCallback)(int socket);
+typedef int(*HttpCallback)(int socket, void* data);
 
 struct HttpHandler {
-    bool valid; /* se l'handler è valido */
-    char url[1024]; /* url di match*/
-    HttpCallback callback; /* funzione da chiamare in caso di match */
+    /* PRIVATE */
+    bool _valid; /* se l'handler è valido */
+    char _url[1024]; /* url di match*/
+    HttpCallback _callback; /* funzione da chiamare in caso di match */
+    void* _data; /* puntatore a memoria dati definita dall'utente */
 };
 
 struct HttpServer {
     /* PRIVATE */
-	struct sockaddr_in addr; /* Indirizzo server */
-	int listener; /* Socket per l'ascolto */
-    struct HttpHandler handlers[MAX_HANDLERS]; /* lista degli handler */
+	struct sockaddr_in _addr; /* Indirizzo server */
+	int _listener; /* Socket per l'ascolto */
+    struct HttpHandler _handlers[MAX_HANDLERS]; /* lista degli handler */
 };
 
-/** Inizializza la struttura Server */
+/** Inizializza la struttura Server 
+ * @param this Istanza dell'HttpServer
+ * @param address IP server (NULL = "0.0.0.0")
+ * @param port Porta del server
+ * @return Se non ci sono stati errori ritorna 0
+*/
 int http_server_init(struct HttpServer* this, const char* address, uint16_t port);
 
-/* Aggiunger un handler al server */
-int http_server_add_handler(struct HttpServer* this, const char* url, HttpCallback callback);
+/** Aggiunger un handler al server 
+ * @param this Istanza dell'HttpServer
+ * @param url Url di match
+ * @param callback Funzione da chiamare in caso di match
+ * @param data Puntatore ad un'allocazione di memoria definita dall'utente (Questo puntatore verrà passato come parametro al callback)
+ * @return Se non ci sono stati errori ritorna 0
+*/
+int http_server_add_handler(struct HttpServer* this, const char* url, HttpCallback callback, void* data);
 
-/** Avvia il server */
+/** Avvia il server 
+ * @note 
+ * @param this Istanza dell'HttpServer
+ * @return Se non ci sono stati errori ritorna 0
+*/
 int http_server_run(struct HttpServer* this);
 
 #ifdef __cplusplus
