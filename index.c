@@ -14,14 +14,44 @@
 IMPORT_FILE(LOCAL_PATH "index.html", html_page);
 IMPORT_FILE(LOCAL_PATH "style.css", css_style);
 IMPORT_FILE(LOCAL_PATH "script.js", js_script);
-IMPORT_FILE(LOCAL_PATH "file.bin", bin_file);
+IMPORT_FILE(LOCAL_PATH "favicon.png", png_favicon);
+
+int png_favicon_callback(int socket, void*){
+    ssize_t ret = 0;
+    char buffer[1024];
+
+    // svuoto il buffer perchè non mi serve
+    while((ret = recv(socket, buffer, sizeof(buffer), MSG_DONTWAIT) != -1 && errno != EWOULDBLOCK));
+
+    ret = snprintf(
+        buffer, 
+        sizeof(buffer), 
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: image/png\r\n"
+        "Content-Length: %ld\r\n"
+        "Connection: keep-alive\r\n"
+        "\r\n",
+        _sizeof_png_favicon
+    );
+
+    if(ret < 0) return -1;
+
+    send(socket, buffer, ret, 0);
+    ret = 0;
+    do{
+        int tmp = send(socket, png_favicon + ret, _sizeof_png_favicon-ret, 0);
+        if(tmp<0) return -1;
+        ret += tmp;
+    }while ((size_t)ret != _sizeof_png_favicon);
+    return 0;
+}
 
 int js_script_callback(int socket, void*){
     ssize_t ret = 0;
     char buffer[1024];
 
     // svuoto il buffer perchè non mi serve
-    while((ret = recv(socket, buffer, sizeof(buffer), 0) == sizeof(buffer)));
+    while((ret = recv(socket, buffer, sizeof(buffer), MSG_DONTWAIT) != -1 && errno != EWOULDBLOCK));
 
     ret = snprintf(
         buffer, 
@@ -51,7 +81,7 @@ int css_style_callback(int socket, void*){
     char buffer[1024];
 
     // svuoto il buffer perchè non mi serve
-    while((ret = recv(socket, buffer, sizeof(buffer), 0) == sizeof(buffer)));
+    while((ret = recv(socket, buffer, sizeof(buffer), MSG_DONTWAIT) != -1 && errno != EWOULDBLOCK));
 
     ret = snprintf(
         buffer, 
@@ -81,7 +111,7 @@ int html_index_callback(int socket, void*){
     char buffer[1024];
 
     // svuoto il buffer perchè non mi serve
-    while((ret = recv(socket, buffer, sizeof(buffer), 0) == sizeof(buffer)));
+    while((ret = recv(socket, buffer, sizeof(buffer), MSG_DONTWAIT) != -1 && errno != EWOULDBLOCK));
 
     ret = snprintf(
         buffer, 
@@ -103,37 +133,5 @@ int html_index_callback(int socket, void*){
         if(tmp<0) return -1;
         ret += tmp;
     }while ((size_t)ret != _sizeof_html_page);
-    return 0;
-}
-
-int html_test_callback(int socket, void*){
-    int ret = 0;
-    char buffer[1024];
-
-    while((ret = recv(socket, buffer, sizeof(buffer), 0) == sizeof(buffer)));
-
-    ret = snprintf(
-        buffer, 
-        sizeof(buffer), 
-        "HTTP/1.1 200 OK\r\n"
-        "Content-Type: application/octet-stream; charset=utf-8\r\n"
-        "Content-Length: %ld\r\n"
-        "Connection: keep-alive\r\n"
-        "\r\n",
-        _sizeof_bin_file
-    );
-
-
-    if(ret < 0) return -1;
-
-    send(socket, buffer, ret, 0);
-
-    ret = 0;
-    do{
-        int tmp = send(socket, bin_file+ret, _sizeof_bin_file-ret, 0);
-        if(tmp<0) return -1;
-        ret += tmp;
-    }while ((size_t)ret != _sizeof_bin_file);
-    
     return 0;
 }

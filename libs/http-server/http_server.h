@@ -37,8 +37,7 @@ extern "C" {
 
 #define MAX_HANDLERS 255
 
-/**
- * Importa un file all'interno del codice.
+/** Importa un file all'interno del codice.
  * @param file Percorso del file da includere
  * @param sym Simbolo da usare per creare il puntatore al file 
  * @return sym e _sizeof_sym che indicano lindirizzo di memoria e la grandezza del file
@@ -72,8 +71,9 @@ struct HttpHandler {
 
 struct HttpServer {
     /* PRIVATE */
+    int _listener; /* Socket per l'ascolto */
+    bool running; /* Indica che il server è in esecuzione */
 	struct sockaddr_in _addr; /* Indirizzo server */
-	int _listener; /* Socket per l'ascolto */
     struct HttpHandler _handlers[MAX_HANDLERS]; /* lista degli handler */
 };
 
@@ -100,6 +100,12 @@ int http_server_add_handler(struct HttpServer* this, const char* url, HttpCallba
  * @return Se non ci sono stati errori ritorna 0
 */
 int http_server_run(struct HttpServer* this);
+
+/** Termina forzatamente il server
+ * @param this Istanza dell'HttpServer
+ * @return Se non ci sono stati errori ritorna 0
+ */
+int http_server_stop(struct HttpServer* this);
 
 #ifdef __cplusplus
 }

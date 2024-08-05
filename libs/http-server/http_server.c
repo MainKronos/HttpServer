@@ -15,7 +15,7 @@ struct ThreadCtx {
     const struct HttpHandler* handlers; /* array con tutti gli handlers */
 };
 
-void* socketHandler(void* arg);
+void* socket_handler(void* arg);
 int on_url(http_parser* parser, const char *at, size_t length);
 
 int http_server_init(struct HttpServer* this, const char* address, uint16_t port){
@@ -30,6 +30,9 @@ int http_server_init(struct HttpServer* this, const char* address, uint16_t port
 
 	/* Creazione socket */
 	this->_listener = socket(AF_INET, SOCK_STREAM, 0);
+    if(setsockopt(this->_listener, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int))){
+        perror("setsockopt error");
+    }
 
 	/* Creazione indirizzo */
 	memset(&this->_addr, 0, sizeof(this->_addr));
@@ -53,9 +56,17 @@ int http_server_init(struct HttpServer* this, const char* address, uint16_t port
     return 0;
 }
 
+int http_server_stop(struct HttpServer* this){
+    /* Check iniziali */
+    if(this == NULL) return -1;
+    if(!this->running) return -1;
+
+    this->running = false;
+	return shutdown(this->_listener, SHUT_RDWR);
+}
+
 int http_server_run(struct HttpServer* this){
     struct ThreadCtx* ctx; /* contesto del thread */
-    socklen_t addrlen; /* sizeof(sockaddr_in); */
 	int ret; /* Valore di ritorno */
     struct sockaddr_in addr; /* Indirizzo client */
     pthread_t thread; /* Thread per la gestione della connessione */
@@ -63,12 +74,11 @@ int http_server_run(struct HttpServer* this){
     /* Check iniziali */
     if(this == NULL) return -1;
 
-    addrlen = sizeof(addr);
-
     printf("Avvio server %s:%d\r\n", inet_ntoa(this->_addr.sin_addr), ntohs(this->_addr.sin_port));
+    this->running = true;
 
     /* --- Ciclo principale -------------------------------------------------------- */
-    while(1) {
+    while(this->running) {
 
 		ctx = (struct ThreadCtx*)malloc(sizeof(struct ThreadCtx));
 		if(ctx == NULL){
@@ -77,7 +87,7 @@ int http_server_run(struct HttpServer* this){
 			break;
 		}
 
-		ctx->socket = accept(this->_listener, (struct sockaddr *)&addr, &addrlen);
+		ctx->socket = accept(this->_listener, (struct sockaddr *)&addr, &(socklen_t){sizeof(addr)});
 		if (ctx->socket < 0){
 			perror("Errore in fase di accept");
             free(ctx);
@@ -88,11 +98,11 @@ int http_server_run(struct HttpServer* this){
 		printf("Nuova connessione da %s:%d\r\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
 
 		/* Creazione thread per la gestione della connessione */
-		ret = pthread_create(&thread, NULL, socketHandler, (void*)ctx);
+		ret = pthread_create(&thread, NULL, socket_handler, (void*)ctx);
 	}
 
 	/* --- Spegnimento Server ------------------------------------------------------------------- */
-
+    
 	printf("Spegnimento server...\r\n");
 	fflush(stdout);
 	close(this->_listener);
@@ -117,8 +127,7 @@ int http_server_add_handler(struct HttpServer* this, const char* url, HttpCallba
 }
 
 int on_url(http_parser* parser, const char *at, size_t length){
-    struct sockaddr_in cl_addr; /* Indirizzo client */
-	socklen_t addrlen = sizeof(cl_addr);
+    struct sockaddr_in addr; /* Indirizzo client */
     struct ThreadCtx* ctx = (struct ThreadCtx*)parser->data;
     struct http_parser_url parser_url;
     int ret;
@@ -128,8 +137,8 @@ int on_url(http_parser* parser, const char *at, size_t length){
     ret = http_parser_parse_url(at, length, false, &parser_url);
     if(ret != 0) return -1;
 
-    getpeername(ctx->socket, (struct sockaddr *)&cl_addr, &addrlen);
-    printf("%s:%d %s %.*s\r\n", inet_ntoa(cl_addr.sin_addr), ntohs(cl_addr.sin_port), http_method_str(parser->method), (int)length, at);
+    getpeername(ctx->socket, (struct sockaddr *)&addr, &(socklen_t){sizeof(addr)});
+    printf("%s:%d %s %.*s\r\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port), http_method_str(parser->method), (int)length, at);
 
     /* scorro tutti gli handler */
     for(int i=0; i<MAX_HANDLERS; i++){
@@ -144,18 +153,16 @@ int on_url(http_parser* parser, const char *at, size_t length){
     return -1;
 }
 
-void* socketHandler(void* arg) {
+void* socket_handler(void* arg) {
     struct ThreadCtx* ctx = ((struct ThreadCtx*)arg); /* contesto del thread */
-	struct sockaddr_in cl_addr; /* Indirizzo client */
+	struct sockaddr_in addr; /* Indirizzo client */
     ssize_t recved;
-	socklen_t addrlen;
     char request[1024];
     char response[1024];
     ssize_t response_size;
     int ret;
 
-	addrlen = sizeof(cl_addr);
-	getpeername(ctx->socket, (struct sockaddr *)&cl_addr, &addrlen);
+	getpeername(ctx->socket, (struct sockaddr *)&addr, &(socklen_t){sizeof(addr)});
 
     http_parser parser;
 
@@ -181,7 +188,7 @@ void* socketHandler(void* arg) {
         if (recved <= 0){
             if (recved < 0) perror("Errore in fase di ricezione");
             /* Connessione chiusa */
-            printf("Connessione chiusa da %s:%d\r\n", inet_ntoa(cl_addr.sin_addr), ntohs(cl_addr.sin_port));
+            printf("Connessione chiusa da %s:%d\r\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
             break;
         }
 
@@ -200,13 +207,9 @@ void* socketHandler(void* arg) {
             strncpy(response, 
                 "HTTP/1.1 404 Not Found\r\n"
                 "Content-Type: text/html; charset=utf-8\r\n"
-                "Content-Length: 291\r\n"
+                "Content-Length: 0\r\n"
                 "Connection: keep-alive\r\n"
-                "\r\n"
-                "<!DOCTYPE html><html><head><title>404 not found</title><style>html{color-scheme:dark;}"
-                "body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;"
-                "font-family:monospace;}h1{font-size: 10em;text-align: center;}</style></head><body><h1"
-                ">404 not found</h1></body></html>",
+                "\r\n",
                 sizeof(response)
             );
             response_size = strlen(response);
@@ -229,7 +232,7 @@ void* socketHandler(void* arg) {
         }
 
         // svuoto il buffer
-        while((recved = recv(ctx->socket, request, sizeof(request), 0) == sizeof(request)));
+        while((recved = recv(ctx->socket, request, sizeof(request), MSG_DONTWAIT) != -1 && errno != EWOULDBLOCK));
 
         // invio la risposta di errore
         send(ctx->socket, response, response_size, 0);
