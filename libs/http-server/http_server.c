@@ -130,8 +130,7 @@ int on_url(http_parser* parser, const char *at, size_t length){
     if(ret != 0) return -1;
 
     getpeername(ctx->socket, (struct sockaddr *)&cl_addr, (int*)&addrlen);
-
-    printf("%s:%d %s %.*s\n", inet_ntoa(cl_addr.sin_addr), ntohs(cl_addr.sin_port), http_method_str(parser->method), length, at);
+    printf("%s:%d %s %.*s\r\n", inet_ntoa(cl_addr.sin_addr), ntohs(cl_addr.sin_port), http_method_str(parser->method), length, at);
 
     /* scorro tutti gli handler */
     for(int i=0; i<MAX_HANDLERS; i++){

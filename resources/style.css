@@ -1,0 +1,16 @@
+html {
+    background-color: #121212;
+    color: #E2E2E2;
+    color-scheme: dark;
+    font-family: sans-serif;
+    line-height: 1.25;
+}
+
+body {
+    margin: auto 50vh auto 0;
+}
+
+h1 {
+    text-align: center;
+    transition: all 1s;
+}

@@ -50,11 +50,11 @@ __asm__( \
     ".balign 16\n" \
     #sym":\n"  \
     ".incbin \"" file "\"\n" \
-    \
+    #sym "_end:\n" \
     ".balign 16\n" \
     ".global _sizeof_" #sym "\n" \
     "_sizeof_" #sym":\n"  \
-    ".long . - 1 - " #sym "\n" \
+    ".long " #sym "_end - 1 - " #sym "\n" \
     ".section \".text\" \n" \
 ); \
 extern __attribute__((aligned(16))) const size_t _sizeof_ ## sym; \
