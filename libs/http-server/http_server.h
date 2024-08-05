@@ -95,7 +95,7 @@ int http_server_init(struct HttpServer* this, const char* address, uint16_t port
 int http_server_add_handler(struct HttpServer* this, const char* url, HttpCallback callback, void* data);
 
 /** Avvia il server 
- * @note 
+ * @note Funzione bloccante, non termina finche il server è in esecuzione
  * @param this Istanza dell'HttpServer
  * @return Se non ci sono stati errori ritorna 0
 */
