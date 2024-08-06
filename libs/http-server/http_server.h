@@ -96,16 +96,16 @@ struct HttpServer {
  * @param port Porta del server
  * @return Se non ci sono stati errori ritorna 0
 */
-int http_server_init(struct HttpServer* this, const char* address, uint16_t port);
+int http_server_init(struct HttpServer* this, const char address[], uint16_t port);
 
 /** Aggiunger un handler al server 
  * @param this Istanza dell'HttpServer
- * @param url Url di match
+ * @param url Url di match [max HTTP_MAX_URL_SIZE]
  * @param callback Funzione da chiamare in caso di match
  * @param data Puntatore ad un'allocazione di memoria definita dall'utente (Questo puntatore verrà passato come parametro al callback)
  * @return Se non ci sono stati errori ritorna 0
 */
-int http_server_add_handler(struct HttpServer* this, const char* url, HttpCallback callback, void* data);
+int http_server_add_handler(struct HttpServer* this, const char url[], HttpCallback callback, void* data);
 
 /** Avvia il server 
  * @note Funzione bloccante, non termina finche il server è in esecuzione

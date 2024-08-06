@@ -1,8 +1,11 @@
 CC := gcc
-CFLAGS := -Iutils -fdiagnostics-color=always -std=c11 -Wall -Wextra -Werror -Wmissing-prototypes -Wstrict-prototypes -ggdb -Ilibs/http-parser -Ilibs/http-server
+LIB := -Ilibs/http-parser -Ilibs/http-server
+CFLAGS := -Iutils -fdiagnostics-color=always -std=c11 -Wall -Wextra -Werror -Wmissing-prototypes -Wstrict-prototypes -ggdb $(LIB)
+RM := rm -f
+SRC := libs/http-parser/http_parser.o libs/http-server/http_server.o $(patsubst %.c,%.o,$(wildcard *.c))
 
-build: main.c $(shell find . -name '*.c')
-	$(CC) $(CFLAGS) -o main.exe $^
+build: $(SRC)
+	$(CC) $(CFLAGS) $(LIB) -o main.exe $^
 
 .PHONY: clean
 clean:
