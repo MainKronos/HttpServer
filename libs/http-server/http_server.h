@@ -35,7 +35,15 @@ extern "C" {
 #include <netinet/in.h>
 #include <stdbool.h>
 
-#define MAX_HANDLERS 255
+#ifndef HTTP_MAX_URL_SIZE
+/** Dimenzione massima dell'url */
+#define HTTP_MAX_URL_SIZE 1024
+#endif
+
+#ifndef HTTP_MAX_HANDLERS
+/** Numero massimo di handlers */
+#define HTTP_MAX_HANDLERS 255
+#endif
 
 /** Importa un file all'interno del codice.
  * @param file Percorso del file da includere
@@ -53,18 +61,23 @@ __asm__( \
     ".balign 16\n" \
     ".global _sizeof_" #sym "\n" \
     "_sizeof_" #sym":\n"  \
-    ".long " #sym "_end - 1 - " #sym "\n" \
+    ".long " #sym "_end - " #sym "\n" \
     ".section \".text\" \n" \
 ); \
 extern __attribute__((aligned(16))) const size_t _sizeof_ ## sym; \
 extern __attribute__((aligned(16))) const char sym[]
 
+/** Funzione di callback
+ * @param socket Socket per la ricezione e l'invio dei dati
+ * @param data puntatore a memoria dati definita dall'utente
+ * @return Ritorna 0 per keep-alive altrimenti chiude la connessione
+ */
 typedef int(*HttpCallback)(int socket, void* data);
 
 struct HttpHandler {
     /* PRIVATE */
     bool _valid; /* se l'handler è valido */
-    char _url[1024]; /* url di match*/
+    char _url[HTTP_MAX_URL_SIZE]; /* url di match*/
     HttpCallback _callback; /* funzione da chiamare in caso di match */
     void* _data; /* puntatore a memoria dati definita dall'utente */
 };
@@ -74,7 +87,7 @@ struct HttpServer {
     int _listener; /* Socket per l'ascolto */
     bool running; /* Indica che il server è in esecuzione */
 	struct sockaddr_in _addr; /* Indirizzo server */
-    struct HttpHandler _handlers[MAX_HANDLERS]; /* lista degli handler */
+    struct HttpHandler _handlers[HTTP_MAX_HANDLERS]; /* lista degli handler */
 };
 
 /** Inizializza la struttura Server 

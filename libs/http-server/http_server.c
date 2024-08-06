@@ -15,8 +15,8 @@ struct ThreadCtx {
     const struct HttpHandler* handlers; /* array con tutti gli handlers */
 };
 
-void* socket_handler(void* arg);
-int on_url(http_parser* parser, const char *at, size_t length);
+static void* socket_handler(void* arg);
+static int on_url(http_parser* parser, const char *at, size_t length);
 
 int http_server_init(struct HttpServer* this, const char* address, uint16_t port){
     int ret; /* Valore di ritorno */
@@ -113,7 +113,7 @@ int http_server_add_handler(struct HttpServer* this, const char* url, HttpCallba
     /* Check iniziali */
     if(this == NULL) return -1;
 
-    for(int i=0; i<MAX_HANDLERS; i++){
+    for(int i=0; i<HTTP_MAX_HANDLERS; i++){
         // se ho trovato uno slot libero
         if(!this->_handlers[i]._valid){
             this->_handlers[i]._valid = true;
@@ -126,7 +126,7 @@ int http_server_add_handler(struct HttpServer* this, const char* url, HttpCallba
     return -1;
 }
 
-int on_url(http_parser* parser, const char *at, size_t length){
+static int on_url(http_parser* parser, const char *at, size_t length){
     struct sockaddr_in addr; /* Indirizzo client */
     struct ThreadCtx* ctx = (struct ThreadCtx*)parser->data;
     struct http_parser_url parser_url;
@@ -141,7 +141,7 @@ int on_url(http_parser* parser, const char *at, size_t length){
     printf("%s:%d %s %.*s\r\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port), http_method_str(parser->method), (int)length, at);
 
     /* scorro tutti gli handler */
-    for(int i=0; i<MAX_HANDLERS; i++){
+    for(int i=0; i<HTTP_MAX_HANDLERS; i++){
         /* se lo slot è valido */
         if(ctx->handlers[i]._valid){
             ret = strncmp(ctx->handlers[i]._url, at + parser_url.field_data[UF_PATH].off, parser_url.field_data[UF_PATH].len);
@@ -153,7 +153,7 @@ int on_url(http_parser* parser, const char *at, size_t length){
     return -1;
 }
 
-void* socket_handler(void* arg) {
+static void* socket_handler(void* arg) {
     struct ThreadCtx* ctx = ((struct ThreadCtx*)arg); /* contesto del thread */
 	struct sockaddr_in addr; /* Indirizzo client */
     ssize_t recved;
