@@ -56,13 +56,13 @@ int http_server_init(struct HttpServer* this, const char address[], uint16_t por
 	// Aggancio del socket all'indirizzo
 	ret = bind(this->_listener, (struct sockaddr *)&this->_addr, sizeof(this->_addr));
 	if (ret < 0){
-		perror("Errore in fase di bind");
+		perror("bind error");
 		return -1;
 	}
 
 	ret = listen(this->_listener, 5);
 	if (ret < 0){
-		perror("Errore in fase di listen");
+		perror("listen error");
 		return -1;
 	}
 
@@ -89,7 +89,7 @@ int http_server_run(struct HttpServer* this){
     if(this == NULL) return -1;
     if(this->running) return -1;
 
-    printf("Avvio server %s:%d\r\n", inet_ntoa(this->_addr.sin_addr), ntohs(this->_addr.sin_port));
+    printf("%s:%d starting...\r\n", inet_ntoa(this->_addr.sin_addr), ntohs(this->_addr.sin_port));
     this->running = true;
 
     /* --- Ciclo principale -------------------------------------------------------- */
@@ -97,14 +97,14 @@ int http_server_run(struct HttpServer* this){
 
 		socket = accept(this->_listener, (struct sockaddr *)&addr, &(socklen_t){sizeof(addr)});
 		if (socket < 0){
-			perror("Errore in fase di accept");
+			perror("accept error");
 			ret = -1;
 			break;
 		}
 
         ctx = (struct ThreadCtx*)malloc(sizeof(struct ThreadCtx));
 		if(ctx == NULL){
-			perror("Errore malloc");
+			perror("malloc error");
             close(socket);
 			ret = -1;
 			break;
@@ -112,7 +112,7 @@ int http_server_run(struct HttpServer* this){
 
         ctx->socket = socket;
         ctx->handlers = this->_handlers;
-		printf("Nuova connessione da %s:%d\r\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
+		printf("%s:%d connected\r\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
 
 		/* Creazione thread per la gestione della connessione */
 		ret = pthread_create(&thread, NULL, socket_handler, (void*)ctx);
@@ -120,7 +120,7 @@ int http_server_run(struct HttpServer* this){
 
 	/* --- Spegnimento Server ------------------------------------------------------------------- */
     
-	printf("Spegnimento server...\r\n");
+	printf("%s:%d closing...\r\n", inet_ntoa(this->_addr.sin_addr), ntohs(this->_addr.sin_port));
 	fflush(stdout);
 	close(this->_listener);
 	return ret;
@@ -170,6 +170,8 @@ static int on_url(http_parser* parser, const char *at, size_t length){
             return 0;
         }
     }
+    // non ho trovato nulla
+    ctx->index = -1; 
     return -1;
 }
 
@@ -191,7 +193,7 @@ static void* socket_handler(void* arg) {
 
 	while(1){
         // reset variabili 
-        ctx->index = -1;
+        ctx->index = -2;
         recved = 0;
 
         // inizializzo il parser
@@ -204,16 +206,15 @@ static void* socket_handler(void* arg) {
 
         // se la connessione è stata chiusa o c'è un errore
         if (recved <= 0){
-            if (recved < 0) perror("Errore in fase di ricezione");
+            if (recved < 0) perror("recv error");
             // Connessione chiusa
-            printf("Connessione chiusa da %s:%d\r\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
             break;
         }
 
         http_parser_execute(&parser, &settings, request, recved);
 
         // se è stato trovato un handler
-        if(ctx->index != -1){
+        if(ctx->index >= 0){
             ret = ctx->handlers[ctx->index]._callback(ctx->socket, ctx->handlers[ctx->index]._data);
             if(ret != 0){
                 break; // chiudo la connessione
@@ -221,7 +222,7 @@ static void* socket_handler(void* arg) {
                 continue; // continuo alla prossima richiesta
             }
         }else // se non è stato trovato un handler
-        if(HTTP_PARSER_ERRNO(&parser) == HPE_CB_url || ctx->index == -1){
+        if(ctx->index == -1){
             strncpy(response, 
                 "HTTP/1.1 404 Not Found\r\n"
                 "Content-Type: text/html; charset=utf-8\r\n"
@@ -232,6 +233,13 @@ static void* socket_handler(void* arg) {
             );
         }else // se c'è un errore
         if(HTTP_PARSER_ERRNO(&parser)){
+            fprintf(
+                stderr, "%s:%d [%s] %s\r\n", 
+                inet_ntoa(addr.sin_addr), 
+                ntohs(addr.sin_port), 
+                http_errno_name(HTTP_PARSER_ERRNO(&parser)),
+                http_errno_description(HTTP_PARSER_ERRNO(&parser))
+            );
             snprintf(
                 response, 
                 sizeof(response),
@@ -240,7 +248,7 @@ static void* socket_handler(void* arg) {
                 "Content-Length: %ld\r\n"
                 "Connection: keep-alive\r\n"
                 "\r\n"
-                "%s: %s",
+                "[%s] %s",
                 strlen(http_errno_name(HTTP_PARSER_ERRNO(&parser))) + strlen(": ") + strlen(http_errno_description(HTTP_PARSER_ERRNO(&parser))),
                 http_errno_name(HTTP_PARSER_ERRNO(&parser)),
                 http_errno_description(HTTP_PARSER_ERRNO(&parser))
@@ -254,6 +262,7 @@ static void* socket_handler(void* arg) {
         send(ctx->socket, response, strlen(response), 0);
     }
 
+    printf("%s:%d disconnected\r\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
     // chiudo il socket
     close(ctx->socket); 
     // libero la memoria

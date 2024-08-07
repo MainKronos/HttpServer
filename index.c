@@ -16,6 +16,96 @@ IMPORT_FILE(LOCAL_PATH "style.css", css_style);
 IMPORT_FILE(LOCAL_PATH "script.js", js_script);
 IMPORT_FILE(LOCAL_PATH "favicon.png", png_favicon);
 
+// non svuoto il buffer
+int test1_callback(int socket, void*){
+    char buffer[1024];
+
+    strncpy(
+        buffer, 
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: text/html; charset=utf-8\r\n"
+        "Content-Length: 6\r\n"
+        "Connection: keep-alive\r\n"
+        "\r\n"
+        "TEST 1",
+        sizeof(buffer)
+    );
+
+    send(socket, buffer, strlen(buffer), 0);
+    return 0;
+}
+
+// Chiudo il socket
+int test2_callback(int socket, void*){
+    ssize_t ret = 0;
+    char buffer[1024];
+
+    // svuoto il buffer perchè non mi serve
+    while((ret = recv(socket, buffer, sizeof(buffer), MSG_DONTWAIT) != -1 && errno != EWOULDBLOCK));
+
+    strncpy(
+        buffer, 
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: text/html; charset=utf-8\r\n"
+        "Content-Length: 6\r\n"
+        "Connection: keep-alive\r\n"
+        "\r\n"
+        "TEST 2",
+        sizeof(buffer)
+    );
+
+    send(socket, buffer, strlen(buffer), 0);
+    close(socket);
+
+    return 0;
+}
+
+// Invio più byte rispetto a quelli dichiarati nel Content-Length
+int test3_callback(int socket, void*){
+    ssize_t ret = 0;
+    char buffer[1024];
+
+    // svuoto il buffer perchè non mi serve
+    while((ret = recv(socket, buffer, sizeof(buffer), MSG_DONTWAIT) != -1 && errno != EWOULDBLOCK));
+
+    strncpy(
+        buffer, 
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: text/html; charset=utf-8\r\n"
+        "Content-Length: 6\r\n"
+        "Connection: keep-alive\r\n"
+        "\r\n"
+        "TEST 3\r\n"
+        "---------------------------",
+        sizeof(buffer)
+    );
+
+    send(socket, buffer, strlen(buffer), 0);
+
+    return 0;
+}
+
+// svuoto il buffer parzialmente
+int test4_callback(int socket, void*){
+    char buffer[1024];
+
+    recv(socket, buffer, 5, 0);
+
+    strncpy(
+        buffer,
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: text/html; charset=utf-8\r\n"
+        "Content-Length: 6\r\n"
+        "Connection: keep-alive\r\n"
+        "\r\n"
+        "TEST 4",
+        sizeof(buffer)
+    );
+
+    send(socket, buffer, strlen(buffer), 0);
+    return 0;
+}
+
 int png_favicon_callback(int socket, void*){
     ssize_t ret = 0;
     char buffer[1024];

@@ -9,4 +9,9 @@ int css_style_callback(int socket, void*);
 int js_script_callback(int socket, void*);
 int png_favicon_callback(int socket, void*);
 
+int test1_callback(int socket, void*);
+int test2_callback(int socket, void*);
+int test3_callback(int socket, void*);
+int test4_callback(int socket, void*);
+
 #endif

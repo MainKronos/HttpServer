@@ -21,6 +21,11 @@ int main(int argc, char* argv[]) {
 	if(http_server_add_handler(&server, "/styles.css", css_style_callback, NULL)) return -1;
 	if(http_server_add_handler(&server, "/script.js", js_script_callback, NULL)) return -1;
 	if(http_server_add_handler(&server, "/favicon.png", png_favicon_callback, NULL)) return -1;
+
+	if(http_server_add_handler(&server, "/test1", test1_callback, NULL)) return -1;
+	if(http_server_add_handler(&server, "/test2", test2_callback, NULL)) return -1;
+	if(http_server_add_handler(&server, "/test3", test3_callback, NULL)) return -1;
+	if(http_server_add_handler(&server, "/test4", test4_callback, NULL)) return -1;
 	if(http_server_run(&server)) return -1;
 
 	return 0;
