@@ -45,6 +45,11 @@ extern "C" {
 #define HTTP_MAX_HANDLERS 255
 #endif
 
+#ifndef HTTP_MAX_THREADS
+/** Numero massimo di threads */
+#define HTTP_MAX_THREADS 10
+#endif
+
 /** Importa un file all'interno del codice.
  * @param file Percorso del file da includere
  * @param sym Simbolo da usare per creare il puntatore al file 
@@ -85,7 +90,7 @@ struct HttpHandler {
 struct HttpServer {
     /* PRIVATE */
     int _listener; /* Socket per l'ascolto */
-    bool running; /* Indica che il server è in esecuzione */
+    bool _running; /* Indica che il server è in esecuzione */
 	struct sockaddr_in _addr; /* Indirizzo server */
     struct HttpHandler _handlers[HTTP_MAX_HANDLERS]; /* lista degli handler */
 };

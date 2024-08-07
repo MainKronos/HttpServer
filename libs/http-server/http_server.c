@@ -72,9 +72,9 @@ int http_server_init(struct HttpServer* this, const char address[], uint16_t por
 int http_server_stop(struct HttpServer* this){
     // Check iniziali
     if(this == NULL) return -1;
-    if(!this->running) return -1;
+    if(!this->_running) return -1;
 
-    this->running = false;
+    this->_running = false;
 	return shutdown(this->_listener, SHUT_RDWR);
 }
 
@@ -87,13 +87,13 @@ int http_server_run(struct HttpServer* this){
 
     // Check iniziali
     if(this == NULL) return -1;
-    if(this->running) return -1;
+    if(this->_running) return -1;
 
     printf("%s:%d starting...\r\n", inet_ntoa(this->_addr.sin_addr), ntohs(this->_addr.sin_port));
-    this->running = true;
+    this->_running = true;
 
     /* --- Ciclo principale -------------------------------------------------------- */
-    while(this->running) {
+    while(this->_running) {
 
 		socket = accept(this->_listener, (struct sockaddr *)&addr, &(socklen_t){sizeof(addr)});
 		if (socket < 0){
