@@ -109,7 +109,7 @@ int http_server_init(struct HttpServer* this, const char address[], uint16_t por
  * @param data Puntatore ad un'allocazione di memoria definita dall'utente (Questo puntatore verrà passato come parametro al callback)
  * @return Se non ci sono stati errori ritorna 0
 */
-int http_server_add_handler(struct HttpServer* this, const char url[], HttpCallback callback, void* data);
+int http_server_add_handler(struct HttpServer* this, const char* url, HttpCallback callback, void* data);
 
 /** Avvia il server 
  * @note Funzione bloccante, non termina finche il server è in esecuzione
