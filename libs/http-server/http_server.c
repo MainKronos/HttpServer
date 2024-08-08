@@ -32,8 +32,6 @@ static int on_url(http_parser* parser, const char *at, size_t length);
 /******************************************************************************/
 
 int http_server_init(struct HttpServer* this, const char address[], uint16_t port){
-    int ret; /* Valore di ritorno */
-
     // Check iniziali
     if(this == NULL) return -1;
     if(port <= 0) return -1;
@@ -42,31 +40,27 @@ int http_server_init(struct HttpServer* this, const char address[], uint16_t por
     memset(this, 0, sizeof(*this));
 
 	// Creazione socket
-	this->_listener = socket(AF_INET, SOCK_STREAM, 0);
-    if(setsockopt(this->_listener, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int))){
-        perror("setsockopt error");
-    }
+	if((this->_listener = socket(AF_INET, SOCK_STREAM, 0)) >= 0){
+        if(setsockopt(this->_listener, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int))){
+            perror("setsockopt error");
+        }
 
-	// Creazione indirizzo
-	memset(&this->_addr, 0, sizeof(this->_addr));
-	this->_addr.sin_family = AF_INET;
-	inet_pton(AF_INET, address ? address : "0.0.0.0", &this->_addr.sin_addr);
-	this->_addr.sin_port = htons(port);
+        // Creazione indirizzo
+        memset(&this->_addr, 0, sizeof(this->_addr));
+        this->_addr.sin_family = AF_INET;
+        inet_pton(AF_INET, address ? address : "0.0.0.0", &this->_addr.sin_addr);
+        this->_addr.sin_port = htons(port);
 
-	// Aggancio del socket all'indirizzo
-	ret = bind(this->_listener, (struct sockaddr *)&this->_addr, sizeof(this->_addr));
-	if (ret < 0){
-		perror("bind error");
-		return -1;
-	}
-
-	ret = listen(this->_listener, 5);
-	if (ret < 0){
-		perror("listen error");
-		return -1;
-	}
-
-    return 0;
+        // Aggancio del socket all'indirizzo
+        if (bind(this->_listener, (struct sockaddr *)&this->_addr, sizeof(this->_addr)) == 0){
+            // Creo la lista in entrata
+            if (listen(this->_listener, 5) == 0){
+                return 0;
+            } else perror("listen error");
+        } else perror("bind error");
+        close(this->_listener);
+    } else perror("socket error");
+    return -1;
 }
 
 int http_server_stop(struct HttpServer* this){
@@ -134,8 +128,7 @@ int http_server_add_handler(struct HttpServer* this, const char url[], HttpCallb
 
     for(int i=0; i<HTTP_MAX_HANDLERS; i++){
         // se ho trovato uno slot libero
-        if(!this->_handlers[i]._valid){
-            this->_handlers[i]._valid = true;
+        if(this->_handlers[i]._callback == NULL){
             strncpy(this->_handlers[i]._url, url, sizeof(this->_handlers[i]._url));
             this->_handlers[i]._callback = callback;
             this->_handlers[i]._data = data;
@@ -163,7 +156,7 @@ static int on_url(http_parser* parser, const char *at, size_t length){
     // scorro tutti gli handler
     for(int i=0; i<HTTP_MAX_HANDLERS; i++){
         // se lo slot è valido
-        if(ctx->handlers[i]._valid){
+        if(ctx->handlers[i]._callback != NULL){
             ret = strncmp(ctx->handlers[i]._url, at + parser_url.field_data[UF_PATH].off, parser_url.field_data[UF_PATH].len);
             if(ret != 0) continue;
             ctx->index = i;

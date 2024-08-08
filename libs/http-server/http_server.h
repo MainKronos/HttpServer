@@ -37,12 +37,12 @@ extern "C" {
 
 #ifndef HTTP_MAX_URL_SIZE
 /** Dimenzione massima dell'url */
-#define HTTP_MAX_URL_SIZE 1024
+#define HTTP_MAX_URL_SIZE 256
 #endif
 
 #ifndef HTTP_MAX_HANDLERS
 /** Numero massimo di handlers */
-#define HTTP_MAX_HANDLERS 255
+#define HTTP_MAX_HANDLERS 128
 #endif
 
 #ifndef HTTP_MAX_THREADS
@@ -81,9 +81,8 @@ typedef int(*HttpCallback)(int socket, void* data);
 
 struct HttpHandler {
     /* PRIVATE */
-    bool _valid; /* se l'handler è valido */
-    char _url[HTTP_MAX_URL_SIZE]; /* url di match*/
     HttpCallback _callback; /* funzione da chiamare in caso di match */
+    char _url[HTTP_MAX_URL_SIZE]; /* url di match*/
     void* _data; /* puntatore a memoria dati definita dall'utente */
 };
 
