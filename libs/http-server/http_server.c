@@ -27,7 +27,7 @@ static void* socket_handler(void* arg);
  * @param at indirizzo inizio stringa url
  * @param length Lunghezza stringa url
  */
-static int on_url(http_parser* parser, const char *at, size_t length);
+static int http_parser_on_url(http_parser* parser, const char *at, size_t length);
 
 /******************************************************************************/
 
@@ -120,7 +120,7 @@ int http_server_run(struct HttpServer* this){
 	return ret;
 }
 
-int http_server_add_handler(struct HttpServer* this, const char url[], HttpCallback callback, void* data){
+int http_server_add_handler(struct HttpServer* this, const char* url, HttpCallback callback, void* data){
     // Check iniziali
     if(this == NULL) return -1;
     if(url == NULL) return -1;
@@ -129,7 +129,7 @@ int http_server_add_handler(struct HttpServer* this, const char url[], HttpCallb
     for(int i=0; i<HTTP_MAX_HANDLERS; i++){
         // se ho trovato uno slot libero
         if(this->_handlers[i]._callback == NULL){
-            strncpy(this->_handlers[i]._url, url, sizeof(this->_handlers[i]._url));
+            this->_handlers[i]._url = url;
             this->_handlers[i]._callback = callback;
             this->_handlers[i]._data = data;
             return 0;
@@ -138,7 +138,7 @@ int http_server_add_handler(struct HttpServer* this, const char url[], HttpCallb
     return -1;
 }
 
-static int on_url(http_parser* parser, const char *at, size_t length){
+static int http_parser_on_url(http_parser* parser, const char *at, size_t length){
     struct ThreadCtx* ctx = (struct ThreadCtx*)parser->data; /* Contesto */
     struct sockaddr_in addr; /* Indirizzo client */
     struct http_parser_url parser_url; /* Url parser */
@@ -172,7 +172,7 @@ static void* socket_handler(void* arg) {
     struct ThreadCtx* ctx = ((struct ThreadCtx*)arg); /* contesto del thread */
 	struct sockaddr_in addr; /* Indirizzo client */
     ssize_t recved; /* Bytes ricevuti */
-    char request[HTTP_MAX_URL_SIZE+254]; /* Buffer per la richiesta */
+    char request[HTTP_MAX_URL_SIZE]; /* Buffer per la richiesta */
     char response[512]; /* Buffer per la risposta (solo in caso di errore )*/
     int ret; /* Valore di ritorno */
     http_parser parser; /* Istanza http parser */
@@ -182,7 +182,7 @@ static void* socket_handler(void* arg) {
     // iniziallizzo i settings del parser
     http_parser_settings settings;
     http_parser_settings_init(&settings);
-    settings.on_url = on_url;
+    settings.on_url = http_parser_on_url;
 
 	while(1){
         // reset variabili 

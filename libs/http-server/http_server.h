@@ -82,7 +82,7 @@ typedef int(*HttpCallback)(int socket, void* data);
 struct HttpHandler {
     /* PRIVATE */
     HttpCallback _callback; /* funzione da chiamare in caso di match */
-    char _url[HTTP_MAX_URL_SIZE]; /* url di match*/
+    const char* _url; /* url di match*/
     void* _data; /* puntatore a memoria dati definita dall'utente */
 };
 
