@@ -29,6 +29,8 @@
 extern "C" {
 #endif
 
+#include <http_parser.h>
+
 #ifdef __linux__
 #include <sys/socket.h>
 #else
@@ -72,12 +74,19 @@ __asm__( \
 extern __attribute__((aligned(16))) const size_t _sizeof_ ## sym; \
 extern __attribute__((aligned(16))) const char sym[]
 
+/* Constesto della callback */
+struct HttpCallbackCtx {
+    int socket; /* Socket della richiesta http */
+    enum http_method method; /* Metodo della richiesta */
+    struct http_parser_url url; /* Informazione url della richiesta */
+};
+
 /** Funzione di callback
- * @param socket Socket per la ricezione e l'invio dei dati
+ * @param ctx Puntatore al contesto della callback
  * @param data puntatore a memoria dati definita dall'utente
  * @return Ritorna 0 per keep-alive altrimenti chiude la connessione
  */
-typedef int(*HttpCallback)(int socket, void* data);
+typedef int(*HttpCallback)(struct HttpCallbackCtx* ctx, void* data);
 
 struct HttpHandler {
     /* PRIVATE */

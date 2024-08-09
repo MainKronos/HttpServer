@@ -16,102 +16,12 @@ IMPORT_FILE(LOCAL_PATH "style.css", css_style);
 IMPORT_FILE(LOCAL_PATH "script.js", js_script);
 IMPORT_FILE(LOCAL_PATH "favicon.png", png_favicon);
 
-// non svuoto il buffer
-int test1_callback(int socket, void*){
-    char buffer[1024];
-
-    strncpy(
-        buffer, 
-        "HTTP/1.1 200 OK\r\n"
-        "Content-Type: text/html; charset=utf-8\r\n"
-        "Content-Length: 6\r\n"
-        "Connection: keep-alive\r\n"
-        "\r\n"
-        "TEST 1",
-        sizeof(buffer)
-    );
-
-    send(socket, buffer, strlen(buffer), 0);
-    return 0;
-}
-
-// Chiudo il socket
-int test2_callback(int socket, void*){
+int png_favicon_callback(struct HttpCallbackCtx* ctx, void*){
     ssize_t ret = 0;
     char buffer[1024];
 
     // svuoto il buffer perchè non mi serve
-    while((ret = recv(socket, buffer, sizeof(buffer), MSG_DONTWAIT) != -1 && errno != EWOULDBLOCK));
-
-    strncpy(
-        buffer, 
-        "HTTP/1.1 200 OK\r\n"
-        "Content-Type: text/html; charset=utf-8\r\n"
-        "Content-Length: 6\r\n"
-        "Connection: keep-alive\r\n"
-        "\r\n"
-        "TEST 2",
-        sizeof(buffer)
-    );
-
-    send(socket, buffer, strlen(buffer), 0);
-    close(socket);
-
-    return 0;
-}
-
-// Invio più byte rispetto a quelli dichiarati nel Content-Length
-int test3_callback(int socket, void*){
-    ssize_t ret = 0;
-    char buffer[1024];
-
-    // svuoto il buffer perchè non mi serve
-    while((ret = recv(socket, buffer, sizeof(buffer), MSG_DONTWAIT) != -1 && errno != EWOULDBLOCK));
-
-    strncpy(
-        buffer, 
-        "HTTP/1.1 200 OK\r\n"
-        "Content-Type: text/html; charset=utf-8\r\n"
-        "Content-Length: 6\r\n"
-        "Connection: keep-alive\r\n"
-        "\r\n"
-        "TEST 3\r\n"
-        "---------------------------",
-        sizeof(buffer)
-    );
-
-    send(socket, buffer, strlen(buffer), 0);
-
-    return 0;
-}
-
-// svuoto il buffer parzialmente
-int test4_callback(int socket, void*){
-    char buffer[1024];
-
-    recv(socket, buffer, 5, 0);
-
-    strncpy(
-        buffer,
-        "HTTP/1.1 200 OK\r\n"
-        "Content-Type: text/html; charset=utf-8\r\n"
-        "Content-Length: 6\r\n"
-        "Connection: keep-alive\r\n"
-        "\r\n"
-        "TEST 4",
-        sizeof(buffer)
-    );
-
-    send(socket, buffer, strlen(buffer), 0);
-    return 0;
-}
-
-int png_favicon_callback(int socket, void*){
-    ssize_t ret = 0;
-    char buffer[1024];
-
-    // svuoto il buffer perchè non mi serve
-    while((ret = recv(socket, buffer, sizeof(buffer), MSG_DONTWAIT) != -1 && errno != EWOULDBLOCK));
+    while((ret = recv(ctx->socket, buffer, sizeof(buffer), MSG_DONTWAIT) != -1 && errno != EWOULDBLOCK));
 
     ret = snprintf(
         buffer, 
@@ -126,22 +36,22 @@ int png_favicon_callback(int socket, void*){
 
     if(ret < 0) return -1;
 
-    send(socket, buffer, ret, 0);
+    send(ctx->socket, buffer, ret, 0);
     ret = 0;
     do{
-        int tmp = send(socket, png_favicon + ret, _sizeof_png_favicon-ret, 0);
+        int tmp = send(ctx->socket, png_favicon + ret, _sizeof_png_favicon-ret, 0);
         if(tmp<0) return -1;
         ret += tmp;
     }while ((size_t)ret != _sizeof_png_favicon);
     return 0;
 }
 
-int js_script_callback(int socket, void*){
+int js_script_callback(struct HttpCallbackCtx* ctx, void*){
     ssize_t ret = 0;
     char buffer[1024];
 
     // svuoto il buffer perchè non mi serve
-    while((ret = recv(socket, buffer, sizeof(buffer), MSG_DONTWAIT) != -1 && errno != EWOULDBLOCK));
+    while((ret = recv(ctx->socket, buffer, sizeof(buffer), MSG_DONTWAIT) != -1 && errno != EWOULDBLOCK));
 
     ret = snprintf(
         buffer, 
@@ -156,22 +66,22 @@ int js_script_callback(int socket, void*){
 
     if(ret < 0) return -1;
 
-    send(socket, buffer, ret, 0);
+    send(ctx->socket, buffer, ret, 0);
     ret = 0;
     do{
-        int tmp = send(socket, js_script + ret, _sizeof_js_script-ret, 0);
+        int tmp = send(ctx->socket, js_script + ret, _sizeof_js_script-ret, 0);
         if(tmp<0) return -1;
         ret += tmp;
     }while ((size_t)ret != _sizeof_js_script);
     return 0;
 }
 
-int css_style_callback(int socket, void*){
+int css_style_callback(struct HttpCallbackCtx* ctx, void*){
     int ret = 0;
     char buffer[1024];
 
     // svuoto il buffer perchè non mi serve
-    while((ret = recv(socket, buffer, sizeof(buffer), MSG_DONTWAIT) != -1 && errno != EWOULDBLOCK));
+    while((ret = recv(ctx->socket, buffer, sizeof(buffer), MSG_DONTWAIT) != -1 && errno != EWOULDBLOCK));
 
     ret = snprintf(
         buffer, 
@@ -186,22 +96,22 @@ int css_style_callback(int socket, void*){
 
     if(ret < 0) return -1;
 
-    send(socket, buffer, ret, 0);
+    send(ctx->socket, buffer, ret, 0);
     ret = 0;
     do{
-        int tmp = send(socket, css_style + ret, _sizeof_css_style-ret, 0);
+        int tmp = send(ctx->socket, css_style + ret, _sizeof_css_style-ret, 0);
         if(tmp<0) return -1;
         ret += tmp;
     }while ((size_t)ret != _sizeof_css_style);
     return 0;
 }
 
-int html_index_callback(int socket, void*){
+int html_index_callback(struct HttpCallbackCtx* ctx, void*){
     int ret = 0;
     char buffer[1024];
 
     // svuoto il buffer perchè non mi serve
-    while((ret = recv(socket, buffer, sizeof(buffer), MSG_DONTWAIT) != -1 && errno != EWOULDBLOCK));
+    while((ret = recv(ctx->socket, buffer, sizeof(buffer), MSG_DONTWAIT) != -1 && errno != EWOULDBLOCK));
 
     ret = snprintf(
         buffer, 
@@ -216,10 +126,10 @@ int html_index_callback(int socket, void*){
 
     if(ret < 0) return -1;
 
-    send(socket, buffer, ret, 0);
+    send(ctx->socket, buffer, ret, 0);
     ret = 0;
     do{
-        int tmp = send(socket, html_page + ret, _sizeof_html_page-ret, 0);
+        int tmp = send(ctx->socket, html_page + ret, _sizeof_html_page-ret, 0);
         if(tmp<0) return -1;
         ret += tmp;
     }while ((size_t)ret != _sizeof_html_page);

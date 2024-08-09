@@ -1,5 +1,4 @@
 #include "http_server.h"
-#include <http_parser.h>
 
 #include <string.h>
 #include <stdio.h>
@@ -15,6 +14,7 @@ struct ThreadCtx {
     int socket; /* socket di invio/ricezione tcp */
     int index; /* indece handler che ha fatto match */
     const struct HttpHandler* handlers; /* array con tutti gli handlers */
+    struct HttpCallbackCtx* callback_ctx; /* Contesto callback da passare alla funzione di callback */
 };
 
 /** Funzione del thread 
@@ -141,12 +141,14 @@ int http_server_add_handler(struct HttpServer* this, const char* url, HttpCallba
 static int http_parser_on_url(http_parser* parser, const char *at, size_t length){
     struct ThreadCtx* ctx = (struct ThreadCtx*)parser->data; /* Contesto */
     struct sockaddr_in addr; /* Indirizzo client */
-    struct http_parser_url parser_url; /* Url parser */
+    struct http_parser_url* parser_url; /* Url parser */
     int ret; /* Valore di ritorno */
 
+    parser_url = &ctx->callback_ctx->url;
+
     // inizializzo l'url parser
-    http_parser_url_init(&parser_url);
-    ret = http_parser_parse_url(at, length, false, &parser_url);
+    http_parser_url_init(parser_url);
+    ret = http_parser_parse_url(at, length, false, parser_url);
     if(ret != 0) return -1;
     
     // Stampo la richiesta ricevuto dal client
@@ -157,7 +159,7 @@ static int http_parser_on_url(http_parser* parser, const char *at, size_t length
     for(int i=0; i<HTTP_MAX_HANDLERS; i++){
         // se lo slot è valido
         if(ctx->handlers[i]._callback != NULL){
-            ret = strncmp(ctx->handlers[i]._url, at + parser_url.field_data[UF_PATH].off, parser_url.field_data[UF_PATH].len);
+            ret = strncmp(ctx->handlers[i]._url, at + parser_url->field_data[UF_PATH].off, parser_url->field_data[UF_PATH].len);
             if(ret != 0) continue;
             ctx->index = i;
             return 0;
@@ -176,6 +178,7 @@ static void* socket_handler(void* arg) {
     char response[512]; /* Buffer per la risposta (solo in caso di errore )*/
     int ret; /* Valore di ritorno */
     http_parser parser; /* Istanza http parser */
+    struct HttpCallbackCtx callback_ctx; /* contesto callback */
 
 	getpeername(ctx->socket, (struct sockaddr *)&addr, &(socklen_t){sizeof(addr)});
 
@@ -184,10 +187,14 @@ static void* socket_handler(void* arg) {
     http_parser_settings_init(&settings);
     settings.on_url = http_parser_on_url;
 
+    // Collego il contesto della callback
+    ctx->callback_ctx = &callback_ctx;
+
 	while(1){
         // reset variabili 
         ctx->index = -2;
         recved = 0;
+        memset(&callback_ctx, 0, sizeof(callback_ctx));
 
         // inizializzo il parser
         http_parser_init(&parser, HTTP_REQUEST);
@@ -208,7 +215,10 @@ static void* socket_handler(void* arg) {
 
         // se è stato trovato un handler
         if(ctx->index >= 0){
-            ret = ctx->handlers[ctx->index]._callback(ctx->socket, ctx->handlers[ctx->index]._data);
+            // Aggiorno il contesto della callback
+            callback_ctx.socket = ctx->socket;
+            callback_ctx.method = parser.method;
+            ret = ctx->handlers[ctx->index]._callback(&callback_ctx, ctx->handlers[ctx->index]._data);
             if(ret != 0){
                 break; // chiudo la connessione
             }else{
