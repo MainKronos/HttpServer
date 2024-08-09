@@ -29,7 +29,12 @@
 extern "C" {
 #endif
 
+#ifdef __linux__
 #include <sys/socket.h>
+#else
+#include <sockLib.h>
+#include <hostLib.h>
+#endif
 #include <arpa/inet.h>
 #include <sys/types.h>
 #include <netinet/in.h>
@@ -43,11 +48,6 @@ extern "C" {
 #ifndef HTTP_MAX_HANDLERS
 /** Numero massimo di handlers */
 #define HTTP_MAX_HANDLERS 128
-#endif
-
-#ifndef HTTP_MAX_THREADS
-/** Numero massimo di threads */
-#define HTTP_MAX_THREADS 10
 #endif
 
 /** Importa un file all'interno del codice.
