@@ -4,7 +4,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <pthread.h>
 #include <errno.h>
 
 /*** PRIVATE *******************************************************************/
@@ -18,7 +17,7 @@ struct ThreadCtx {
 };
 
 /** Funzione del thread 
- * @param arg struct ThreadCtx
+ * @param arg struct ThreadCtx*
 */
 static void* socket_handler(void* arg);
 
@@ -28,6 +27,13 @@ static void* socket_handler(void* arg);
  * @param length Lunghezza stringa url
  */
 static int http_parser_on_url(http_parser* parser, const char *at, size_t length);
+
+
+/** funzione del thread del server
+ * @param arg struct HttpServer*
+ * @return Se non ci sono stati errori ritorna 0
+ */
+static void* http_server_run(void* arg);
 
 /******************************************************************************/
 
@@ -64,60 +70,87 @@ int http_server_init(struct HttpServer* this, const char address[], uint16_t por
 }
 
 int http_server_stop(struct HttpServer* this){
+    int ret;
     // Check iniziali
     if(this == NULL) return -1;
     if(!this->_running) return -1;
 
     this->_running = false;
-	return shutdown(this->_listener, SHUT_RDWR);
+	if((ret = pthread_cancel(this->_thread) ) == 0){
+        printf("%s:%d closing...\r\n", inet_ntoa(this->_addr.sin_addr), ntohs(this->_addr.sin_port));
+        fflush(stdout);
+        close(this->_listener);
+    }else perror("pthread_cancel error");
+    return ret;
 }
 
-int http_server_run(struct HttpServer* this){
-    struct ThreadCtx* ctx; /* contesto del thread */
-	int ret; /* Valore di ritorno */
-    struct sockaddr_in addr; /* Indirizzo client */
-    pthread_t thread; /* Thread per la gestione della connessione */
-    int socket; /* Socket che si è connesso al server */
-
+int http_server_start(struct HttpServer* this){
     // Check iniziali
     if(this == NULL) return -1;
     if(this->_running) return -1;
 
+    if(pthread_create(&this->_thread, NULL, http_server_run, (void*)this) == 0){
+        this->_running = true;
+        return 0;
+    }else perror("pthread_create error");
+    return -1;
+}
+
+int http_server_join(struct HttpServer* this){
+    int ret;
+    void* tmp;
+
+    // Check iniziali
+    if(this == NULL) return -1;
+
+    if(pthread_join(this->_thread, &tmp) != 0){
+        perror("pthread_join error");
+        return -1;
+    }
+
+    ret = *(int*)&tmp;
+    return ret;
+}
+
+static void* http_server_run(void* arg){
+    struct HttpServer* this; /* HttpServer */
+    struct ThreadCtx* ctx; /* contesto del thread */
+    struct sockaddr_in addr; /* Indirizzo client */
+    pthread_t thread; /* Thread per la gestione della connessione */
+    int socket; /* Socket che si è connesso al server */
+
+    this = (struct HttpServer*)arg;
+
     printf("%s:%d starting...\r\n", inet_ntoa(this->_addr.sin_addr), ntohs(this->_addr.sin_port));
-    this->_running = true;
 
     /* --- Ciclo principale -------------------------------------------------------- */
-    while(this->_running) {
+    while(true) {
+        // Controllo se il thread è corretto
+        if(pthread_equal(this->_thread, pthread_self())){
+            if((socket = accept(this->_listener, (struct sockaddr *)&addr, &(socklen_t){sizeof(addr)})) >= 0 ){
+                if((ctx = (struct ThreadCtx*)malloc(sizeof(struct ThreadCtx))) != NULL){
+                    ctx->socket = socket;
+                    ctx->handlers = this->_handlers;
+                    printf("%s:%d connected\r\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
 
-		socket = accept(this->_listener, (struct sockaddr *)&addr, &(socklen_t){sizeof(addr)});
-		if (socket < 0){
-			perror("accept error");
-			ret = -1;
-			break;
-		}
+                    /* Creazione thread per la gestione della connessione */
+                    if(pthread_create(&thread, NULL, socket_handler, (void*)ctx) == 0){
+                        continue;
+                    }else perror("pthread_create error");
+                    free(ctx);
+                }else perror("malloc error");
+                close(socket);
+            }else perror("accept error");
+        }
 
-        ctx = (struct ThreadCtx*)malloc(sizeof(struct ThreadCtx));
-		if(ctx == NULL){
-			perror("malloc error");
-            close(socket);
-			ret = -1;
-			break;
-		}
-
-        ctx->socket = socket;
-        ctx->handlers = this->_handlers;
-		printf("%s:%d connected\r\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
-
-		/* Creazione thread per la gestione della connessione */
-		ret = pthread_create(&thread, NULL, socket_handler, (void*)ctx);
+    /* --- Spegnimento Server in caso di errore -------------------------------------------------------------- */
+        this->_running = false;
+        close(this->_listener);
+        pthread_exit((void*)-1);
+        return NULL;
 	}
 
-	/* --- Spegnimento Server ------------------------------------------------------------------- */
-    
-	printf("%s:%d closing...\r\n", inet_ntoa(this->_addr.sin_addr), ntohs(this->_addr.sin_port));
-	fflush(stdout);
-	close(this->_listener);
-	return ret;
+	return NULL;
 }
 
 int http_server_add_handler(struct HttpServer* this, const char* url, HttpCallback callback, void* data){
@@ -187,13 +220,15 @@ static void* socket_handler(void* arg) {
     http_parser_settings_init(&settings);
     settings.on_url = http_parser_on_url;
 
-    // Collego il contesto della callback
-    ctx->callback_ctx = &callback_ctx;
+    
 
 	while(1){
         // reset variabili 
         ctx->index = -2;
         recved = 0;
+
+        // Collego il contesto della callback
+        ctx->callback_ctx = &callback_ctx;
         memset(&callback_ctx, 0, sizeof(callback_ctx));
 
         // inizializzo il parser
@@ -218,7 +253,8 @@ static void* socket_handler(void* arg) {
             // Aggiorno il contesto della callback
             callback_ctx.socket = ctx->socket;
             callback_ctx.method = parser.method;
-            ret = ctx->handlers[ctx->index]._callback(&callback_ctx, ctx->handlers[ctx->index]._data);
+            callback_ctx.data = ctx->handlers[ctx->index]._data;
+            ret = ctx->handlers[ctx->index]._callback(&callback_ctx);
             if(ret != 0){
                 break; // chiudo la connessione
             }else{

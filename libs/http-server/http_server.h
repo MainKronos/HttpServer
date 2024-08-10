@@ -41,6 +41,7 @@ extern "C" {
 #include <sys/types.h>
 #include <netinet/in.h>
 #include <stdbool.h>
+#include <pthread.h>
 
 #ifndef HTTP_MAX_URL_SIZE
 /** Dimenzione massima dell'url */
@@ -79,14 +80,14 @@ struct HttpCallbackCtx {
     int socket; /* Socket della richiesta http */
     enum http_method method; /* Metodo della richiesta */
     struct http_parser_url url; /* Informazione url della richiesta */
+    void* data; /* data puntatore a memoria dati definita dall'utente */
 };
 
 /** Funzione di callback
  * @param ctx Puntatore al contesto della callback
- * @param data puntatore a memoria dati definita dall'utente
  * @return Ritorna 0 per keep-alive altrimenti chiude la connessione
  */
-typedef int(*HttpCallback)(struct HttpCallbackCtx* ctx, void* data);
+typedef int(*HttpCallback)(struct HttpCallbackCtx* ctx);
 
 struct HttpHandler {
     /* PRIVATE */
@@ -97,6 +98,7 @@ struct HttpHandler {
 
 struct HttpServer {
     /* PRIVATE */
+    pthread_t _thread; /* Thread del server */
     int _listener; /* Socket per l'ascolto */
     bool _running; /* Indica che il server è in esecuzione */
 	struct sockaddr_in _addr; /* Indirizzo server */
@@ -113,7 +115,7 @@ int http_server_init(struct HttpServer* this, const char address[], uint16_t por
 
 /** Aggiunger un handler al server 
  * @param this Istanza dell'HttpServer
- * @param url Url di match [max HTTP_MAX_URL_SIZE]
+ * @param url Url di match
  * @param callback Funzione da chiamare in caso di match
  * @param data Puntatore ad un'allocazione di memoria definita dall'utente (Questo puntatore verrà passato come parametro al callback)
  * @return Se non ci sono stati errori ritorna 0
@@ -121,11 +123,16 @@ int http_server_init(struct HttpServer* this, const char address[], uint16_t por
 int http_server_add_handler(struct HttpServer* this, const char* url, HttpCallback callback, void* data);
 
 /** Avvia il server 
- * @note Funzione bloccante, non termina finche il server è in esecuzione
  * @param this Istanza dell'HttpServer
  * @return Se non ci sono stati errori ritorna 0
 */
-int http_server_run(struct HttpServer* this);
+int http_server_start(struct HttpServer* this);
+
+/** Attende che il server sia terminato
+ * @param this Istanza dell'HttpServer
+ * @return Se non ci sono stati errori ritorna 0
+*/
+int http_server_join(struct HttpServer* this);
 
 /** Termina forzatamente il server
  * @param this Istanza dell'HttpServer

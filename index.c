@@ -16,7 +16,7 @@ IMPORT_FILE(LOCAL_PATH "style.css", css_style);
 IMPORT_FILE(LOCAL_PATH "script.js", js_script);
 IMPORT_FILE(LOCAL_PATH "favicon.png", png_favicon);
 
-int png_favicon_callback(struct HttpCallbackCtx* ctx, void*){
+int png_favicon_callback(struct HttpCallbackCtx* ctx){
     ssize_t ret = 0;
     char buffer[1024];
 
@@ -46,7 +46,7 @@ int png_favicon_callback(struct HttpCallbackCtx* ctx, void*){
     return 0;
 }
 
-int js_script_callback(struct HttpCallbackCtx* ctx, void*){
+int js_script_callback(struct HttpCallbackCtx* ctx){
     ssize_t ret = 0;
     char buffer[1024];
 
@@ -76,7 +76,7 @@ int js_script_callback(struct HttpCallbackCtx* ctx, void*){
     return 0;
 }
 
-int css_style_callback(struct HttpCallbackCtx* ctx, void*){
+int css_style_callback(struct HttpCallbackCtx* ctx){
     int ret = 0;
     char buffer[1024];
 
@@ -106,7 +106,7 @@ int css_style_callback(struct HttpCallbackCtx* ctx, void*){
     return 0;
 }
 
-int html_index_callback(struct HttpCallbackCtx* ctx, void*){
+int html_index_callback(struct HttpCallbackCtx* ctx){
     int ret = 0;
     char buffer[1024];
 
