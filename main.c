@@ -4,7 +4,7 @@
 #include <http_server.h>
 #include "index.h"
 
-struct HttpServer server;
+static struct HttpServer server;
 
 static void sigHandler(int signum);
 static void sigHandler(int signum){

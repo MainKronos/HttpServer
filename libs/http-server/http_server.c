@@ -35,9 +35,17 @@ static int http_parser_on_url(http_parser* parser, const char *at, size_t length
  */
 static void* http_server_run(void* arg);
 
+/** funzione di cleanup del thread del server
+ * @param arg struct HttpServer*
+ * @return Se non ci sono stati errori ritorna 0
+ */
+static void http_server_cleanup(void* arg);
+
 /******************************************************************************/
 
 int http_server_init(struct HttpServer* this, const char address[], uint16_t port){
+    struct sockaddr_in addr; /* Indirizzo server */
+
     // Check iniziali
     if(this == NULL) return -1;
     if(port <= 0) return -1;
@@ -52,15 +60,15 @@ int http_server_init(struct HttpServer* this, const char address[], uint16_t por
         }
 
         // Creazione indirizzo
-        memset(&this->_addr, 0, sizeof(this->_addr));
-        this->_addr.sin_family = AF_INET;
-        inet_pton(AF_INET, address ? address : "0.0.0.0", &this->_addr.sin_addr);
-        this->_addr.sin_port = htons(port);
+        memset(&addr, 0, sizeof(addr));
+        addr.sin_family = AF_INET;
+        inet_pton(AF_INET, address ? address : "0.0.0.0", &addr.sin_addr);
+        addr.sin_port = htons(port);
 
         // Aggancio del socket all'indirizzo
-        if (bind(this->_listener, (struct sockaddr *)&this->_addr, sizeof(this->_addr)) == 0){
+        if (bind(this->_listener, (struct sockaddr *)&addr, sizeof(addr)) == 0){
             // Creo la lista in entrata
-            if (listen(this->_listener, 5) == 0){
+            if (listen(this->_listener, HTTP_MAX_WORKERS) == 0){
                 return 0;
             } else perror("listen error");
         } else perror("bind error");
@@ -70,18 +78,32 @@ int http_server_init(struct HttpServer* this, const char address[], uint16_t por
 }
 
 int http_server_stop(struct HttpServer* this){
-    int ret;
     // Check iniziali
     if(this == NULL) return -1;
     if(!this->_running) return -1;
 
+	if((pthread_cancel(this->_thread) ) == 0){
+        return 0;
+    }else{
+        perror("pthread_cancel error");
+        return -1;
+    } 
+}
+
+static void http_server_cleanup(void* arg){
+    struct HttpServer* this; /* HttpServer */
+    struct sockaddr_in addr; /* Indirizzo server */
+
+    this = (struct HttpServer*) arg;
+
+    // Check iniziali
+    if(this == NULL) return;
+
+    getpeername(this->_listener, (struct sockaddr *)&addr, &(socklen_t){sizeof(addr)});
+    printf("%s:%d closing...\r\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
+    fflush(stdout);
     this->_running = false;
-	if((ret = pthread_cancel(this->_thread) ) == 0){
-        printf("%s:%d closing...\r\n", inet_ntoa(this->_addr.sin_addr), ntohs(this->_addr.sin_port));
-        fflush(stdout);
-        close(this->_listener);
-    }else perror("pthread_cancel error");
-    return ret;
+    close(this->_listener);
 }
 
 int http_server_start(struct HttpServer* this){
@@ -121,7 +143,10 @@ static void* http_server_run(void* arg){
 
     this = (struct HttpServer*)arg;
 
-    printf("%s:%d starting...\r\n", inet_ntoa(this->_addr.sin_addr), ntohs(this->_addr.sin_port));
+    pthread_cleanup_push(http_server_cleanup, this);
+
+    getpeername(this->_listener, (struct sockaddr *)&addr, &(socklen_t){sizeof(addr)});
+    printf("%s:%d starting...\r\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
 
     /* --- Ciclo principale -------------------------------------------------------- */
     while(true) {
@@ -144,11 +169,11 @@ static void* http_server_run(void* arg){
         }
 
     /* --- Spegnimento Server in caso di errore -------------------------------------------------------------- */
-        this->_running = false;
-        close(this->_listener);
         pthread_exit((void*)-1);
         return NULL;
 	}
+
+    pthread_cleanup_pop(0);
 
 	return NULL;
 }
