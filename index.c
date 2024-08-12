@@ -16,6 +16,29 @@ IMPORT_FILE(LOCAL_PATH "style.css", css_style);
 IMPORT_FILE(LOCAL_PATH "script.js", js_script);
 IMPORT_FILE(LOCAL_PATH "favicon.png", png_favicon);
 
+int close_callback(struct HttpCallbackCtx* ctx){
+    ssize_t ret = 0;
+    char buffer[1024];
+
+    // svuoto il buffer perchè non mi serve
+    while((ret = recv(ctx->socket, buffer, sizeof(buffer), MSG_DONTWAIT) != -1 && errno != EWOULDBLOCK));
+
+    strncpy(
+        buffer, 
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: text/html; charset=utf-8\r\n"
+        "Content-Length: 13\r\n"
+        "Connection: keep-alive\r\n"
+        "\r\n"
+        "BYE BYE 👋",
+        sizeof(buffer)
+    );
+
+    send(ctx->socket, buffer, strlen(buffer), 0);
+    http_server_stop(ctx->server);
+    return 0;
+}
+
 int png_favicon_callback(struct HttpCallbackCtx* ctx){
     ssize_t ret = 0;
     char buffer[1024];
