@@ -55,7 +55,7 @@ extern "C" {
 
 #ifndef HTTP_MAX_WORKERS
 /** Numero massimo di handlers */
-#define HTTP_MAX_WORKERS 2
+#define HTTP_MAX_WORKERS 1
 #endif
 
 /** Importa un file all'interno del codice.
@@ -82,10 +82,9 @@ extern __attribute__((aligned(16))) const char sym[]
 
 /* Constesto della callback */
 struct HttpCallbackCtx {
-    struct HttpServer* server;
+    struct HttpServer* server; /* Istanza del server*/
     int socket; /* Socket della richiesta http */
     enum http_method method; /* Metodo della richiesta */
-    struct http_parser_url url; /* Informazione url della richiesta */
     void* data; /* data puntatore a memoria dati definita dall'utente */
 };
 
@@ -113,6 +112,7 @@ enum HttpServerState {
 struct HttpServer {
     /* PRIVATE */
     int _listener; /* Socket per l'ascolto */
+    struct sockaddr_in _addr; /* Indirizzo server */
     enum HttpServerState _state; /* Indica lo stato del server */
     pthread_t _workers[HTTP_MAX_WORKERS]; /* Array di worker che gestiscono le connesioni */
     struct HttpHandler _handlers[HTTP_MAX_HANDLERS]; /* lista degli handler */

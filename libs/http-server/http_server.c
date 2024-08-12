@@ -1,5 +1,11 @@
 #include "http_server.h"
 
+#ifdef __linux__
+#include <sys/select.h>
+#else
+#include <selectLib.h>
+#endif
+
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -35,8 +41,6 @@ static void http_worker_cleanup(void* arg);
 /******************************************************************************/
 
 int http_server_init(struct HttpServer* this, const char address[], uint16_t port){
-    struct sockaddr_in addr; /* Indirizzo server */
-
     // Check iniziali
     if(this == NULL) return -1;
     if(port <= 0) return -1;
@@ -46,20 +50,20 @@ int http_server_init(struct HttpServer* this, const char address[], uint16_t por
 
 	// Creazione socket
 	if((this->_listener = socket(AF_INET, SOCK_STREAM, 0)) >= 0){
-        if(setsockopt(this->_listener, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int))){
+        if(setsockopt(this->_listener, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int)) != 0){
             perror("setsockopt error");
         }
 
         // Creazione indirizzo
-        memset(&addr, 0, sizeof(addr));
-        addr.sin_family = AF_INET;
-        inet_pton(AF_INET, address ? address : "0.0.0.0", &addr.sin_addr);
-        addr.sin_port = htons(port);
+        memset(&this->_addr, 0, sizeof(this->_addr));
+        this->_addr.sin_family = AF_INET;
+        inet_pton(AF_INET, address ? address : "0.0.0.0", &this->_addr.sin_addr);
+        this->_addr.sin_port = htons(port);
 
         // Aggancio del socket all'indirizzo
-        if (bind(this->_listener, (struct sockaddr *)&addr, sizeof(addr)) == 0){
+        if (bind(this->_listener, (struct sockaddr *)&this->_addr, sizeof(this->_addr)) == 0){
             // Creo la lista in entrata
-            if (listen(this->_listener, HTTP_MAX_WORKERS) == 0){
+            if (listen(this->_listener, HTTP_MAX_WORKERS - 1) == 0){
                 this->_state = HTTP_SERVER_INITIALIZED;
                 return 0;
             } else perror("listen error");
@@ -70,14 +74,12 @@ int http_server_init(struct HttpServer* this, const char address[], uint16_t por
 }
 
 int http_server_stop(struct HttpServer* this){
-    struct sockaddr_in addr; /* Indirizzo server */
     // Check iniziali
     if(this == NULL) return -1;
     if(this->_state != HTTP_SERVER_RUNNING) return -1;
     if(this->_listener < 0) return -1;
 
-    getpeername(this->_listener, (struct sockaddr *)&addr, &(socklen_t){sizeof(addr)});
-    printf("%s:%d closing...\r\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
+    printf("%s:%d closing...\r\n", inet_ntoa(this->_addr.sin_addr), ntohs(this->_addr.sin_port));
     fflush(stdout);
     this->_state = HTTP_SERVER_STOPPED;
     for(int i=0; i<HTTP_MAX_WORKERS; i++){
@@ -89,16 +91,14 @@ int http_server_stop(struct HttpServer* this){
 }
 
 int http_server_start(struct HttpServer* this){
-    struct sockaddr_in addr; /* Indirizzo server */
     int i;
 
     // Check iniziali
     if(this == NULL) return -1;
     if(this->_state != HTTP_SERVER_INITIALIZED) return -1;
 
-    getpeername(this->_listener, (struct sockaddr *)&addr, &(socklen_t){sizeof(addr)});
-    printf("%s:%d starting...\r\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
-
+    printf("%s:%d starting...\r\n", inet_ntoa(this->_addr.sin_addr), ntohs(this->_addr.sin_port));
+    
     for(i=0; i<HTTP_MAX_WORKERS; i++){
         if(pthread_create(&this->_workers[i], NULL, http_worker_run, (void*)this) != 0){
             perror("pthread_create error");
@@ -110,9 +110,13 @@ int http_server_start(struct HttpServer* this){
         this->_state = HTTP_SERVER_RUNNING;
         return 0;
     }
+
     for(;i>=0; i--){
         pthread_cancel(this->_workers[i]);
     }
+
+    close(this->_listener);
+    memset(this, 0, sizeof(*this));
 
     return -1;
 }
@@ -133,7 +137,6 @@ int http_server_join(struct HttpServer* this){
 
     return 0;
 }
-
 
 int http_server_add_handler(struct HttpServer* this, const char* url, HttpCallback callback, void* data){
     // Check iniziali
@@ -156,14 +159,12 @@ int http_server_add_handler(struct HttpServer* this, const char* url, HttpCallba
 static int http_parser_on_url(http_parser* parser, const char *at, size_t length){
     struct HttpRequestCtx* ctx = (struct HttpRequestCtx*)parser->data; /* Contesto */
     struct sockaddr_in addr; /* Indirizzo client */
-    struct http_parser_url* parser_url; /* Url parser */
+    struct http_parser_url parser_url; /* Url parser */
     int ret; /* Valore di ritorno */
 
-    parser_url = &ctx->callback_ctx->url;
-
     // inizializzo l'url parser
-    http_parser_url_init(parser_url);
-    ret = http_parser_parse_url(at, length, false, parser_url);
+    http_parser_url_init(&parser_url);
+    ret = http_parser_parse_url(at, length, false, &parser_url);
     if(ret != 0) return -1;
     
     // Stampo la richiesta ricevuto dal client
@@ -174,7 +175,7 @@ static int http_parser_on_url(http_parser* parser, const char *at, size_t length
     for(int i=0; i<HTTP_MAX_HANDLERS; i++){
         // se lo slot è valido
         if(ctx->handlers[i]._callback != NULL){
-            ret = strncmp(ctx->handlers[i]._url, at + parser_url->field_data[UF_PATH].off, parser_url->field_data[UF_PATH].len);
+            ret = strncmp(ctx->handlers[i]._url, at + parser_url.field_data[UF_PATH].off, parser_url.field_data[UF_PATH].len);
             if(ret != 0) continue;
             // aggiorno il contesto della callback
             ctx->callback = ctx->handlers[i]._callback;
@@ -223,8 +224,6 @@ static void* http_worker_run(void* arg){
         printf("%s:%d connected\r\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
 
         pthread_cleanup_push(http_worker_cleanup, *(void**)&socket);
-
-        getpeername(socket, (struct sockaddr *)&addr, &(socklen_t){sizeof(addr)});
 
         // inizializzo i setting del parser
         http_parser_settings_init(&settings);
@@ -314,7 +313,10 @@ static void* http_worker_run(void* arg){
 
         pthread_cleanup_pop(0);
 
-        printf("%s:%d disconnected\r\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
+        if(getpeername(socket, (struct sockaddr *)&addr, &(socklen_t){sizeof(addr)}) == 0){
+            printf("%s:%d disconnected\r\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
+        } else perror("getpeername error");
+        
         // chiudo il socket
         close(socket); 
     }

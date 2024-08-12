@@ -20,6 +20,9 @@ int close_callback(struct HttpCallbackCtx* ctx){
     ssize_t ret = 0;
     char buffer[1024];
 
+    // fermo il server
+    http_server_stop(ctx->server);
+
     // svuoto il buffer perchè non mi serve
     while((ret = recv(ctx->socket, buffer, sizeof(buffer), MSG_DONTWAIT) != -1 && errno != EWOULDBLOCK));
 
@@ -35,7 +38,6 @@ int close_callback(struct HttpCallbackCtx* ctx){
     );
 
     send(ctx->socket, buffer, strlen(buffer), 0);
-    http_server_stop(ctx->server);
     return 0;
 }
 
@@ -148,6 +150,8 @@ int html_index_callback(struct HttpCallbackCtx* ctx){
     );
 
     if(ret < 0) return -1;
+
+    sleep(2);
 
     send(ctx->socket, buffer, ret, 0);
     ret = 0;
