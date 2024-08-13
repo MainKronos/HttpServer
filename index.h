@@ -11,4 +11,9 @@ int png_favicon_callback(struct HttpCallbackCtx* ctx);
 
 int close_callback(struct HttpCallbackCtx* ctx);
 
+int test1_callback(struct HttpCallbackCtx* ctx);
+int test2_callback(struct HttpCallbackCtx* ctx);
+int test3_callback(struct HttpCallbackCtx* ctx);
+int test4_callback(struct HttpCallbackCtx* ctx);
+
 #endif

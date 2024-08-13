@@ -23,6 +23,11 @@ int main(int argc, char* argv[]) {
 	if(http_server_add_handler(&server, "/favicon.png", png_favicon_callback, NULL)) return -1;
 	if(http_server_add_handler(&server, "/stop", close_callback, NULL)) return -1;
 
+	if(http_server_add_handler(&server, "/test/1", test1_callback, NULL)) return -1;
+	if(http_server_add_handler(&server, "/test/2", test2_callback, NULL)) return -1;
+	if(http_server_add_handler(&server, "/test/3", test3_callback, NULL)) return -1;
+	if(http_server_add_handler(&server, "/test/4", test4_callback, NULL)) return -1;
+
 	if(http_server_start(&server)) return -1;
 	return http_server_join(&server);
 }

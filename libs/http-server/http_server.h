@@ -57,7 +57,7 @@ extern "C" {
 
 #ifndef HTTP_MAX_WORKERS
 /** Numero massimo di handlers */
-#define HTTP_MAX_WORKERS 1
+#define HTTP_MAX_WORKERS 10
 #endif
 
 /** Importa un file all'interno del codice.
@@ -119,6 +119,10 @@ struct HttpServer {
     enum HttpServerState _state; /* Indica lo stato del server */
     fd_set _master_set; /* Set con tutti i descrittori */
     struct HttpHandler _handlers[HTTP_MAX_HANDLERS]; /* lista degli handler */
+    pthread_t _workers[HTTP_MAX_WORKERS]; /* thread worker */
+    struct HttpRequestCtx* _data; /* Puntatore per lo scambio di dati tra i thread */
+    pthread_mutex_t _mutex_sync; /* Mutex di sincronizzazione */
+    pthread_cond_t _cond_sync; /* Varaibile cond di sincronizzazione */
 };
 
 /** Inizializza la struttura Server 

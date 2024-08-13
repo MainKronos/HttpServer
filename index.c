@@ -24,8 +24,9 @@ int close_callback(struct HttpCallbackCtx* ctx){
 
     strncpy(
         buffer, 
-        "HTTP/1.0 200 OK\r\n"
+        "HTTP/1.1 200 OK\r\n"
         "Content-Type: text/html; charset=utf-8\r\n"
+        "Connection: close\r\n"
         "Content-Length: 13\r\n"
         "\r\n"
         "BYE BYE 👋",
@@ -43,7 +44,8 @@ int png_favicon_callback(struct HttpCallbackCtx* ctx){
     ret = snprintf(
         buffer, 
         sizeof(buffer), 
-        "HTTP/1.0 200 OK\r\n"
+        "HTTP/1.1 200 OK\r\n"
+        "Connection: close\r\n"
         "Content-Type: image/png\r\n"
         "Content-Length: %ld\r\n"
         "\r\n",
@@ -69,8 +71,9 @@ int js_script_callback(struct HttpCallbackCtx* ctx){
     ret = snprintf(
         buffer, 
         sizeof(buffer), 
-        "HTTP/1.0 200 OK\r\n"
+        "HTTP/1.1 200 OK\r\n"
         "Content-Type: text/javascript; charset=utf-8\r\n"
+        "Connection: close\r\n"
         "Content-Length: %ld\r\n"
         "\r\n",
         _sizeof_js_script
@@ -95,16 +98,15 @@ int css_style_callback(struct HttpCallbackCtx* ctx){
     ret = snprintf(
         buffer, 
         sizeof(buffer), 
-        "HTTP/1.0 200 OK\r\n"
+        "HTTP/1.1 200 OK\r\n"
         "Content-Type: text/css; charset=utf-8\r\n"
+        "Connection: close\r\n"
         "Content-Length: %ld\r\n"
         "\r\n",
         _sizeof_css_style
     );
 
     if(ret < 0) return -1;
-
-    sleep(20);
 
     send(ctx->socket, buffer, ret, 0);
     ret = 0;
@@ -123,16 +125,15 @@ int html_index_callback(struct HttpCallbackCtx* ctx){
     ret = snprintf(
         buffer, 
         sizeof(buffer), 
-        "HTTP/1.0 200 OK\r\n"
+        "HTTP/1.1 200 OK\r\n"
         "Content-Type: text/html; charset=utf-8\r\n"
+        "Connection: close\r\n"
         "Content-Length: %ld\r\n"
         "\r\n",
         _sizeof_html_page
     );
 
     if(ret < 0) return -1;
-
-    sleep(2);
 
     send(ctx->socket, buffer, ret, 0);
     ret = 0;
@@ -141,5 +142,97 @@ int html_index_callback(struct HttpCallbackCtx* ctx){
         if(tmp<0) return -1;
         ret += tmp;
     }while ((size_t)ret != _sizeof_html_page);
+    return 0;
+}
+
+/*********************************************************************************/
+
+// non svuoto il buffer
+int test1_callback(struct HttpCallbackCtx* ctx){
+    char buffer[1024];
+
+    strncpy(
+        buffer, 
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: text/html; charset=utf-8\r\n"
+        "Content-Length: 6\r\n"
+        "Connection: close\r\n"
+        "\r\n"
+        "TEST 1",
+        sizeof(buffer)
+    );
+
+    send(ctx->socket, buffer, strlen(buffer), 0);
+    return 0;
+}
+
+// Chiudo il socket
+int test2_callback(struct HttpCallbackCtx* ctx){
+    ssize_t ret = 0;
+    char buffer[1024];
+
+    // svuoto il buffer perchè non mi serve
+    while((ret = recv(ctx->socket, buffer, sizeof(buffer), MSG_DONTWAIT) != -1 && errno != EWOULDBLOCK));
+
+    strncpy(
+        buffer, 
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: text/html; charset=utf-8\r\n"
+        "Content-Length: 6\r\n"
+        "Connection: keep-alive\r\n"
+        "\r\n"
+        "TEST 2",
+        sizeof(buffer)
+    );
+
+    send(ctx->socket, buffer, strlen(buffer), 0);
+    close(ctx->socket);
+
+    return 0;
+}
+
+// Invio più byte rispetto a quelli dichiarati nel Content-Length
+int test3_callback(struct HttpCallbackCtx* ctx){
+    ssize_t ret = 0;
+    char buffer[1024];
+
+    // svuoto il buffer perchè non mi serve
+    while((ret = recv(ctx->socket, buffer, sizeof(buffer), MSG_DONTWAIT) != -1 && errno != EWOULDBLOCK));
+
+    strncpy(
+        buffer, 
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: text/html; charset=utf-8\r\n"
+        "Content-Length: 6\r\n"
+        "Connection: close\r\n"
+        "\r\n"
+        "TEST 3\r\n"
+        "---------------------------",
+        sizeof(buffer)
+    );
+
+    send(ctx->socket, buffer, strlen(buffer), 0);
+
+    return 0;
+}
+
+// svuoto il buffer parzialmente
+int test4_callback(struct HttpCallbackCtx* ctx){
+    char buffer[1024];
+
+    recv(ctx->socket, buffer, 5, 0);
+
+    strncpy(
+        buffer,
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: text/html; charset=utf-8\r\n"
+        "Content-Length: 6\r\n"
+        "Connection: close\r\n"
+        "\r\n"
+        "TEST 4",
+        sizeof(buffer)
+    );
+
+    send(ctx->socket, buffer, strlen(buffer), 0);
     return 0;
 }
