@@ -33,9 +33,11 @@ extern "C" {
 
 #ifdef __linux__
 #include <sys/socket.h>
+#include <sys/select.h>
 #else
 #include <sockLib.h>
 #include <hostLib.h>
+#include <selectLib.h>
 #endif
 #include <arpa/inet.h>
 #include <sys/types.h>
@@ -111,10 +113,11 @@ enum HttpServerState {
 /* Struttura del server */
 struct HttpServer {
     /* PRIVATE */
+    pthread_t _thread; /* Thread del server */
     int _listener; /* Socket per l'ascolto */
     struct sockaddr_in _addr; /* Indirizzo server */
     enum HttpServerState _state; /* Indica lo stato del server */
-    pthread_t _workers[HTTP_MAX_WORKERS]; /* Array di worker che gestiscono le connesioni */
+    fd_set _master_set; /* Set con tutti i descrittori */
     struct HttpHandler _handlers[HTTP_MAX_HANDLERS]; /* lista degli handler */
 };
 
