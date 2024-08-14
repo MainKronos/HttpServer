@@ -80,21 +80,14 @@ __asm__( \
     ".section \".text\" \n" \
 ); \
 extern __attribute__((aligned(16))) const size_t _sizeof_ ## sym; \
-extern __attribute__((aligned(16))) const char sym[]
-
-/* Constesto della callback */
-struct HttpCallbackCtx {
-    struct HttpServer* server; /* Istanza del server*/
-    int socket; /* Socket della richiesta http */
-    enum http_method method; /* Metodo della richiesta */
-    void* data; /* data puntatore a memoria dati definita dall'utente */
-};
+extern __attribute__((aligned(16))) __attribute__((nonstring)) const uint8_t sym[]
 
 /** Funzione di callback
- * @param ctx Puntatore al contesto della callback
+ * @param socket File Descriptor del socket
+ * @param data puntatore a memoria dati definita dall'utente
  * @return Ritorna 0 per keep-alive altrimenti chiude la connessione
  */
-typedef int(*HttpCallback)(struct HttpCallbackCtx* ctx);
+typedef int(*HttpCallback)(int socket, void* data);
 
 /* Struttura utilizzata per morizzare tutti gli handler */
 struct HttpHandler {

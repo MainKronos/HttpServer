@@ -4,16 +4,21 @@
 #include <stdlib.h>
 #include <http_server.h>
 
-int html_index_callback(struct HttpCallbackCtx* ctx);
-int css_style_callback(struct HttpCallbackCtx* ctx);
-int js_script_callback(struct HttpCallbackCtx* ctx);
-int png_favicon_callback(struct HttpCallbackCtx* ctx);
+int html_index_callback(int socket, void* data);
+int css_style_callback(int socket, void* data);
+int js_script_callback(int socket, void* data);
+int png_favicon_callback(int socket, void* data);
 
-int close_callback(struct HttpCallbackCtx* ctx);
+int close_callback(int socket, void* data);
 
-int test1_callback(struct HttpCallbackCtx* ctx);
-int test2_callback(struct HttpCallbackCtx* ctx);
-int test3_callback(struct HttpCallbackCtx* ctx);
-int test4_callback(struct HttpCallbackCtx* ctx);
+int test0_callback(int socket, void* data);
+int test1_callback(int socket, void* data);
+int test2_callback(int socket, void* data);
+int test3_callback(int socket, void* data);
+int test4_callback(int socket, void* data);
+int test5_callback(int socket, void* data);
+int test6_callback(int socket, void* data);
+int test7_callback(int socket, void* data);
+int test8_callback(int socket, void* data);
 
 #endif
