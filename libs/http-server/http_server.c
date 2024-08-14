@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <errno.h>
-#include <sys/time.h>
+#include <fcntl.h>
 
 /*** PRIVATE *******************************************************************/
 
@@ -59,7 +59,7 @@ int http_server_init(struct HttpServer* this, const char address[], uint16_t por
             // Creazione socket
             if((this->_listener = socket(AF_INET, SOCK_STREAM, 0)) >= 0){
                 if(setsockopt(this->_listener, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int)) != 0){
-                    perror("setsockopt error");
+                    fprintf(stderr, "%s:%d setsockopt error: %s\r\n", __FILE__, __LINE__, strerror(errno));
                 }
 
                 // Creazione indirizzo
@@ -77,14 +77,14 @@ int http_server_init(struct HttpServer* this, const char address[], uint16_t por
                         // Aggiorno lo stato del server
                         this->_state = HTTP_SERVER_INITIALIZED;
                         return 0;
-                    } else perror("listen error");
-                } else perror("bind error");
+                    } else fprintf(stderr, "%s:%d listen error: %s\r\n", __FILE__, __LINE__, strerror(errno));
+                } else fprintf(stderr, "%s:%d bind error: %s\r\n", __FILE__, __LINE__, strerror(errno));
                 close(this->_listener);
-            } else perror("socket error");
+            } else fprintf(stderr, "%s:%d socket error: %s\r\n", __FILE__, __LINE__, strerror(errno));
             pthread_cond_destroy(&this->_cond_sync);
-        } else perror("pthread_cond_init error");
+        } else fprintf(stderr, "%s:%d pthread_cond_init error: %s\r\n", __FILE__, __LINE__, strerror(errno));
         pthread_mutex_destroy(&this->_mutex_sync);
-    } else perror("pthread_mutex_init error");
+    } else fprintf(stderr, "%s:%d pthread_mutex_init error: %s\r\n", __FILE__, __LINE__, strerror(errno));
     return -1;
 }
 
@@ -99,7 +99,7 @@ int http_server_stop(struct HttpServer* this){
     fflush(stdout);
     this->_state = HTTP_SERVER_STOPPED;
     if((ret = pthread_cancel(this->_thread)) != 0){
-        fprintf(stderr, "pthread_cancel error: %s\r\n", strerror(ret));
+        fprintf(stderr, "%s:%d pthread_cancel error: %s\r\n", __FILE__, __LINE__,  strerror(ret));
         return -1;
     }
     return 0;
@@ -114,16 +114,16 @@ static void http_server_cleanup(void* arg){
     FD_CLR(this->_listener, &this->_master_set);
 
     if((ret = pthread_mutex_lock(&this->_mutex_sync)) != 0){
-        fprintf(stderr, "pthread_mutex_lock error: %s\r\n", strerror(ret));
+        fprintf(stderr, "%s:%d pthread_mutex_lock error: %s\r\n", __FILE__, __LINE__, strerror(ret));
     }
     // Indico che il server si stà spegnendo
     this->_data = (void*)-1;
     if((ret = pthread_mutex_unlock(&this->_mutex_sync)) != 0){
-        fprintf(stderr, "pthread_mutex_unlock error: %s\r\n", strerror(ret));
+        fprintf(stderr, "%s:%d pthread_mutex_unlock error: %s\r\n", __FILE__, __LINE__, strerror(ret));
     }
     // Risveglio tutti i worker
     if((ret = pthread_cond_broadcast(&this->_cond_sync)) != 0){
-        fprintf(stderr, "pthread_cond_broadcast error: %s\r\n", strerror(ret));
+        fprintf(stderr, "%s:%d pthread_cond_broadcast error: %s\r\n", __FILE__, __LINE__, strerror(ret));
     }
 
     // Chiudo tutti i socket nel set
@@ -131,24 +131,30 @@ static void http_server_cleanup(void* arg){
         if(FD_ISSET(i, &this->_master_set)){
             if(getpeername(i, (struct sockaddr *)&addr, &(socklen_t){sizeof(addr)}) == 0){
                 printf("%s:%d \e[31mdisconnected\e[0m\r\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
-            } else perror("getpeername error");
-            if(close(i) != 0) perror("close error");
+            } else fprintf(stderr, "%s:%d getpeername error: %s\r\n", __FILE__, __LINE__, strerror(errno));
+            if(close(i) != 0) {
+                fprintf(stderr, "%s:%d, close error: %s\r\n", __FILE__, __LINE__, strerror(errno));
+            }
         }
     }
 
     // Attendo che i worker abbiano terminato
     for(int i=0; i<HTTP_MAX_WORKERS; i++){
-        if(pthread_join(this->_workers[i], &tmp) != 0) perror("pthread_join error");
+        if((ret = pthread_join(this->_workers[i], &tmp)) != 0){
+            fprintf(stderr, "%s:%d pthread_join error: %s\r\n", __FILE__, __LINE__, strerror(ret));
+        }
     }
 
     if((ret = pthread_cond_destroy(&this->_cond_sync)) != 0){
-        fprintf(stderr, "pthread_cond_destroy error: %s\r\n", strerror(ret));
+        fprintf(stderr, "%s:%d pthread_cond_destroy error: %s\r\n", __FILE__, __LINE__, strerror(ret));
     }
     if((ret = pthread_mutex_destroy(&this->_mutex_sync)) != 0){
-        fprintf(stderr, "pthread_mutex_destroy error: %s\r\n", strerror(ret));
+        fprintf(stderr, "%s:%d pthread_mutex_destroy error: %s\r\n", __FILE__, __LINE__, strerror(ret));
     } 
 
-    if(close(this->_listener) != 0) perror("close error");
+    if(close(this->_listener) != 0){
+        fprintf(stderr, "%s:%d close error: %s\r\n", __FILE__, __LINE__, strerror(errno));
+    } 
     printf("%s:%d stopped\r\n", inet_ntoa(this->_addr.sin_addr), ntohs(this->_addr.sin_port));
 }
 
@@ -164,38 +170,43 @@ static void* http_worker_run(void* arg){
     while(1){
         
         if((ret = pthread_mutex_lock(&this->_mutex_sync)) != 0) {
-            fprintf(stderr, "pthread_mutex_lock error: %s\r\n", strerror(ret));
+            fprintf(stderr, "%s:%d pthread_mutex_lock error: %s\r\n", __FILE__, __LINE__, strerror(ret));
         }
         // Attendo di ricevere un nuovo job
         while(this->_data == NULL){
             if((ret = pthread_cond_wait(&this->_cond_sync, &this->_mutex_sync)) != 0){
-                fprintf(stderr, "pthread_cond_wait error: %s\r\n", strerror(ret));
+                fprintf(stderr, "%s:%d pthread_cond_wait error: %s\r\n", __FILE__, __LINE__, strerror(ret));
             }
         }
         // Se i server mi ha notificato di terminare
         if(this->_data == (void*)-1){
             if((ret = pthread_mutex_unlock(&this->_mutex_sync)) != 0){
-                fprintf(stderr, "pthread_mutex_unlock error: %s\r\n", strerror(ret));
+                fprintf(stderr, "%s:%d pthread_mutex_unlock error: %s\r\n", __FILE__, __LINE__, strerror(ret));
             }
             break;
         }else{
             memcpy(&request_ctx, this->_data, sizeof(request_ctx));
             this->_data = NULL;
             if((ret = pthread_mutex_unlock(&this->_mutex_sync)) != 0){
-                fprintf(stderr, "pthread_mutex_unlock error: %s\r\n", strerror(ret));
+                fprintf(stderr, "%s:%d pthread_mutex_unlock error: %s\r\n", __FILE__, __LINE__, strerror(ret));
             }
         }
         if((ret = pthread_cond_broadcast(&this->_cond_sync)) != 0){
-            fprintf(stderr, "pthread_cond_broadcast error: %s\r\n", strerror(ret));
+            fprintf(stderr, "%s:%d pthread_cond_broadcast error: %s\r\n", __FILE__, __LINE__, strerror(ret));
         }       
         
         request_ctx.callback(request_ctx.socket, request_ctx.data);
 
-        if(getpeername(request_ctx.socket, (struct sockaddr *)&addr, &(socklen_t){sizeof(addr)}) == 0){
-            printf("%s:%d \e[31mdisconnected\e[0m\r\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
-        } else perror("getpeername error");
+        // Controllo se il socket è stato chiuso erroneamente dall'utente
+        if(fcntl(request_ctx.socket, F_GETFL) != -1 || errno != EBADF){
+            if(getpeername(request_ctx.socket, (struct sockaddr *)&addr, &(socklen_t){sizeof(addr)}) == 0){
+                printf("%s:%d \e[31mdisconnected\e[0m\r\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
+            } else fprintf(stderr, "%s:%d getpeername error: %s\r\n", __FILE__, __LINE__, strerror(errno));
 
-        if(close(request_ctx.socket) != 0) perror("close error");
+            if(close(request_ctx.socket) != 0) {
+                fprintf(stderr, "%s:%d close error: %s\r\n", __FILE__, __LINE__, strerror(errno));
+            }
+        }        
     }
 
     pthread_exit(NULL);
@@ -230,7 +241,7 @@ static void* http_server_run(void* arg){
         temp_set = this->_master_set;
 
         if(select(FD_SETSIZE, &temp_set, NULL, NULL, NULL) < 0){
-            perror("select error");
+            fprintf(stderr, "%s:%d select error: %s\r\n", __FILE__, __LINE__, strerror(errno));
             break;
         }
 
@@ -243,7 +254,7 @@ static void* http_server_run(void* arg){
                         FD_SET(fd, &this->_master_set);
                         printf("%s:%d \e[32mconnected\e[0m\r\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
                     } else{
-                        perror("accept error");
+                        fprintf(stderr, "%s:%d accept error: %s\r\n", __FILE__, __LINE__, strerror(errno));
                         break;
                     }
                 } // se ho dei dati in ingresso
@@ -253,17 +264,17 @@ static void* http_server_run(void* arg){
                     // Attendo che il contesto della richiesta sia stato prelevato
                     pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &state);
                     if((ret = pthread_mutex_lock(&this->_mutex_sync)) != 0){
-                        fprintf(stderr, "pthread_mutex_lock error: %s\r\n", strerror(ret));
+                        fprintf(stderr, "%s:%d pthread_mutex_lock error: %s\r\n", __FILE__, __LINE__, strerror(ret));
                         break;
                     }
                     while(this->_data != NULL){
                         if((ret = pthread_cond_wait(&this->_cond_sync, &this->_mutex_sync)) != 0){
-                            fprintf(stderr, "pthread_cond_wait error: %s\r\n", strerror(ret));
+                            fprintf(stderr, "%s:%d pthread_cond_wait error: %s\r\n", __FILE__, __LINE__, strerror(ret));
                             break;
                         }
                     }   
                     if((ret = pthread_mutex_unlock(&this->_mutex_sync)) != 0){
-                        fprintf(stderr, "pthread_mutex_unlock error: %s\r\n", strerror(ret));
+                        fprintf(stderr, "%s:%d pthread_mutex_unlock error: %s\r\n", __FILE__, __LINE__, strerror(ret));
                         break;
                     }    
                     pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &state);
@@ -296,7 +307,7 @@ static void* http_server_run(void* arg){
                                 "\r\n";
                             // invio la risposta di errore
                             if(send(fd, response, sizeof(response)-1, 0) < 0){
-                                perror("send error");
+                                fprintf(stderr, "%s:%d send error: %s\r\n", __FILE__, __LINE__, strerror(errno));
                                 break;
                             } 
                         } else // Se c'è stato un errore
@@ -324,19 +335,19 @@ static void* http_server_run(void* arg){
                             );
                             // invio la risposta di errore
                             if(send(fd, response, ret, 0) < 0){
-                                perror("send error");
+                                fprintf(stderr, "%s:%d send error: %s\r\n", __FILE__, __LINE__, strerror(errno));
                                 break;
                             } 
                         } else {
                             pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &state);
                             // Attendo lo slot per il contesto sia libero
                             if((ret = pthread_mutex_lock(&this->_mutex_sync)) != 0){
-                                fprintf(stderr, "pthread_mutex_lock error: %s\r\n", strerror(ret));
+                                fprintf(stderr, "%s:%d pthread_mutex_lock error: %s\r\n", __FILE__, __LINE__, strerror(ret));
                                 break;
                             }
                             while(this->_data != NULL){
                                 if((ret = pthread_cond_wait(&this->_cond_sync, &this->_mutex_sync)) != 0){
-                                    fprintf(stderr, "pthread_cond_wait error: %s\r\n", strerror(ret));
+                                    fprintf(stderr, "%s:%d pthread_cond_wait error: %s\r\n", __FILE__, __LINE__, strerror(ret));
                                     break;
                                 }
                             }
@@ -345,12 +356,12 @@ static void* http_server_run(void* arg){
                             // rimuovo il socket dal set
                             FD_CLR(fd, &this->_master_set);
                             if((ret = pthread_mutex_unlock(&this->_mutex_sync)) != 0){
-                                fprintf(stderr, "pthread_mutex_unlock error: %s\r\n", strerror(ret));
+                                fprintf(stderr, "%s:%d pthread_mutex_unlock error: %s\r\n",__FILE__, __LINE__, strerror(ret));
                                 break;
                             }
                             // Risveglio tutti un thread bloccato
                             if((ret = pthread_cond_signal(&this->_cond_sync)) != 0){
-                                fprintf(stderr, "pthread_cond_broadcast error: %s\r\n", strerror(ret));
+                                fprintf(stderr, "%s:%d pthread_cond_broadcast error: %s\r\n", __FILE__, __LINE__, strerror(ret));
                                 break;
                             }
                             pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &state);
@@ -358,19 +369,19 @@ static void* http_server_run(void* arg){
                             continue;
                         }
                     } else if(recved < 0){
-                        perror("recv error");
+                        fprintf(stderr, "%s:%d recv error: %s\r\n", __FILE__, __LINE__, strerror(errno));
                         break;
                     } 
 
                     if(getpeername(fd, (struct sockaddr *)&addr, &(socklen_t){sizeof(addr)}) == 0){
                         printf("%s:%d \e[31mdisconnected\e[0m\r\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
-                    } else perror("getpeername error");
+                    } else fprintf(stderr, "%s:%d getpeername error: %s\r\n", __FILE__, __LINE__, strerror(errno));
 
                     // rimuovo il socket dal set
                     FD_CLR(fd, &this->_master_set);
                     // chiudo la connessione
                     if(close(fd) != 0){
-                        perror("close error");
+                        fprintf(stderr, "%s:%d close error: %s\r\n", __FILE__, __LINE__, strerror(errno));
                         break;
                     }
                 }
@@ -397,61 +408,64 @@ int http_server_start(struct HttpServer* this){
     if(this->_state != HTTP_SERVER_INITIALIZED) return -1;
 
     for(i = 0; i < HTTP_MAX_WORKERS; i++){
-        if(pthread_create(&this->_workers[i], NULL, http_worker_run, (void*)this) != 0){
-            perror("pthread_create error");
+        if((ret = pthread_create(&this->_workers[i], NULL, http_worker_run, (void*)this)) != 0){
+            fprintf(stderr, "%s:%d pthread_create error: %s\r\n", __FILE__, __LINE__, strerror(ret));
             break;
         }
     }
     // Se sono stati creati tutti i worker
     if(i == HTTP_MAX_WORKERS){
-        if(pthread_create(&this->_thread, NULL, http_server_run, (void*)this) == 0){
+        if((ret = pthread_create(&this->_thread, NULL, http_server_run, (void*)this)) == 0){
             printf("%s:%d started\r\n", inet_ntoa(this->_addr.sin_addr), ntohs(this->_addr.sin_port));
             this->_state = HTTP_SERVER_RUNNING;
             return 0;
-        }else perror("pthread_create error");
+        }else fprintf(stderr, "%s:%d pthread_create error: %s\r\n", __FILE__, __LINE__, strerror(ret));
     }else{
         if((ret = pthread_mutex_lock(&this->_mutex_sync)) != 0){
-            fprintf(stderr, "pthread_mutex_lock error: %s\r\n", strerror(ret));
+            fprintf(stderr, "%s:%d pthread_mutex_lock error: %s\r\n", __FILE__, __LINE__, strerror(ret));
         }
         // Indico che il server si stà spegnendo
         this->_data = (void*)-1;
         if((ret = pthread_mutex_unlock(&this->_mutex_sync)) != 0){
-            fprintf(stderr, "pthread_mutex_unlock error: %s\r\n", strerror(ret));
+            fprintf(stderr, "%s:%d pthread_mutex_unlock error: %s\r\n", __FILE__, __LINE__, strerror(ret));
         }
         // Risveglio tutti i worker
         if((ret = pthread_cond_broadcast(&this->_cond_sync)) != 0){
-            fprintf(stderr, "pthread_cond_broadcast error: %s\r\n", strerror(ret));
+            fprintf(stderr, "%s:%d pthread_cond_broadcast error: %s\r\n", __FILE__, __LINE__, strerror(ret));
         }
 
         for(; i>=0; i--){
             if((ret = pthread_join(this->_workers[i], &tmp)) != 0){
-                fprintf(stderr, "pthread_join error: %s\r\n", strerror(ret));
+                fprintf(stderr, "%s:%d pthread_join error: %s\r\n", __FILE__, __LINE__, strerror(ret));
             }
         }
     }
 
     if((ret = pthread_cond_destroy(&this->_cond_sync)) != 0){
-        fprintf(stderr, "pthread_cond_destroy error: %s\r\n", strerror(ret));
+        fprintf(stderr, "%s:%d pthread_cond_destroy error: %s\r\n", __FILE__, __LINE__, strerror(ret));
     }
     if((ret = pthread_mutex_destroy(&this->_mutex_sync)) != 0){
-        fprintf(stderr, "pthread_mutex_destroy error: %s\r\n", strerror(ret));
+        fprintf(stderr, "%s:%d pthread_mutex_destroy error: %s\r\n", __FILE__, __LINE__, strerror(ret));
     }
-    if(close(this->_listener) != 0) perror("close error");
+    if(close(this->_listener) != 0){  
+        fprintf(stderr, "%s:%d close error: %s\r\n", __FILE__, __LINE__, strerror(errno));
+    } 
     memset(this, 0, sizeof(*this));
     return -1;
 }
 
 int http_server_join(struct HttpServer* this){
+    int ret;
     void* tmp;
 
     // Check iniziali
     if(this == NULL) return -1;
     if(this->_state == HTTP_SERVER_INITIALIZED) return -1;
 
-    if(pthread_join(this->_thread, &tmp) == 0){
+    if((ret = pthread_join(this->_thread, &tmp)) == 0){
         memset(this, 0, sizeof(*this));
         return 0;
-    } else perror("pthread_join error");
+    } else fprintf(stderr, "%s:%d pthread_join error: %s\r\n", __FILE__, __LINE__, strerror(ret));
     return -1;
 }
 
@@ -487,7 +501,7 @@ static int http_parser_on_url(http_parser* parser, const char *at, size_t length
     // Stampo la richiesta ricevuto dal client
     if(getpeername(ctx->socket, (struct sockaddr *)&addr, &(socklen_t){sizeof(addr)}) == 0){
         printf("%s:%d %s %.*s\r\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port), http_method_str(parser->method), (int)length, at);
-    } else perror("getpeername error");
+    } else fprintf(stderr, "%s:%d getpeername error: %s\r\n", __FILE__, __LINE__, strerror(errno));
     
     // scorro tutti gli handler
     for(int i=0; i<HTTP_MAX_HANDLERS; i++){

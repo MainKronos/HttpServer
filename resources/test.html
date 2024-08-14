@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>TEST</title>
+</head>
+
+<body>
+    <ul>
+        <li>TEST 0: <span id="test0">loading...</span></li>
+        <li>TEST 1: <span id="test1">loading...</span></li>
+        <li>TEST 2: <span id="test2">loading...</span></li>
+        <li>TEST 3: <span id="test3">loading...</span></li>
+        <li>TEST 4: <span id="test4">loading...</span></li>
+        <li>TEST 5: <span id="test5">loading...</span></li>
+        <li>TEST 6: <span id="test6">loading...</span></li>
+        <li>TEST 7: <span id="test7">loading...</span></li>
+        <li>TEST 8: <span id="test8">loading...</span></li>
+    </ul>
+    <script>
+        window.addEventListener('load', async function () {
+
+            for(let i=0; i<8; i++){
+                if((await fetch(`/test/${i}`)).ok) document.getElementById(`test${i}`).innerText = "OK";
+                else document.getElementById(`test${i}`).innerText = "KO";
+            }
+
+            if((await Promise.all(Array.from({ length: 10 }, (_, i) => fetch(`/test/8.${i}`)))).every((v) => v.ok)) 
+                document.getElementById("test8").innerText = "OK";
+            else
+                document.getElementById("test8").innerText = "KO";
+        });
+    </script>
+</body>
+
+</html>

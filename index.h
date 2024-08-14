@@ -7,10 +7,11 @@
 int html_index_callback(int socket, void* data);
 int css_style_callback(int socket, void* data);
 int js_script_callback(int socket, void* data);
-int png_favicon_callback(int socket, void* data);
+int ico_favicon_callback(int socket, void* data);
 
 int close_callback(int socket, void* data);
 
+int test_callback(int socket, void* data);
 int test0_callback(int socket, void* data);
 int test1_callback(int socket, void* data);
 int test2_callback(int socket, void* data);
