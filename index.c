@@ -18,176 +18,91 @@ IMPORT_FILE(LOCAL_PATH "script.js", js_script);
 IMPORT_FILE(LOCAL_PATH "favicon.ico", ico_favicon);
 
 int close_callback(int socket, void* data){
-    char buffer[1024];
-
-    // fermo il server
-    http_server_stop((struct HttpServer*)data);
-
-    strncpy(
-        buffer, 
+    char buffer[] = 
         "HTTP/1.1 200 OK\r\n"
         "Content-Type: text/html; charset=utf-8\r\n"
         "Connection: close\r\n"
         "Content-Length: 13\r\n"
         "\r\n"
-        "BYE BYE 👋",
-        sizeof(buffer)
-    );
+        "BYE BYE 👋";
 
-    send(socket, buffer, strlen(buffer), 0);
+    // fermo il server
+    http_server_stop((struct HttpServer*)data);
+
+    send(socket, buffer, sizeof(buffer) - 1, 0);
     return 0;
 }
 
 int ico_favicon_callback(int socket, void* data){
-    ssize_t ret = 0;
-    char buffer[1024];
-
-    // Segnalo che al compilatore che non uso la variabile data
+    // Segnalo al compilatore che non uso la variabile data
     (void)data;
 
-    ret = snprintf(
-        buffer, 
-        sizeof(buffer), 
-        "HTTP/1.1 200 OK\r\n"
+    return send_http_response(
+        socket, 
+        HTTP_STATUS_OK, 
         "Connection: close\r\n"
-        "Content-Type: image/ico\r\n"
-        "Content-Length: %ld\r\n"
-        "\r\n",
+        "Content-Type: image/ico\r\n",
+        ico_favicon,
         _sizeof_ico_favicon
     );
-
-    if(ret < 0) return -1;
-
-    send(socket, buffer, ret, 0);
-    ret = 0;
-    do{
-        int tmp = send(socket, ico_favicon + ret, _sizeof_ico_favicon-ret, 0);
-        if(tmp<0) return -1;
-        ret += tmp;
-    }while ((size_t)ret != _sizeof_ico_favicon);
-    return 0;
 }
 
 int js_script_callback(int socket, void* data){
-    ssize_t ret = 0;
-    char buffer[1024];
-
-    // Segnalo che al compilatore che non uso la variabile data
+    // Segnalo al compilatore che non uso la variabile data
     (void)data;
 
-    ret = snprintf(
-        buffer, 
-        sizeof(buffer), 
-        "HTTP/1.1 200 OK\r\n"
-        "Content-Type: text/javascript; charset=utf-8\r\n"
+    return send_http_response(
+        socket, 
+        HTTP_STATUS_OK,
         "Connection: close\r\n"
-        "Content-Length: %ld\r\n"
-        "\r\n",
+        "Content-Type: text/javascript; charset=utf-8\r\n",
+        js_script,
         _sizeof_js_script
     );
-
-    if(ret < 0) return -1;
-
-    send(socket, buffer, ret, 0);
-    ret = 0;
-    do{
-        int tmp = send(socket, js_script + ret, _sizeof_js_script-ret, 0);
-        if(tmp<0) return -1;
-        ret += tmp;
-    }while ((size_t)ret != _sizeof_js_script);
-    return 0;
 }
 
 int css_style_callback(int socket, void* data){
-    int ret = 0;
-    char buffer[1024];
-
     // Segnalo che al compilatore che non uso la variabile data
     (void)data;
 
-    ret = snprintf(
-        buffer, 
-        sizeof(buffer), 
-        "HTTP/1.1 200 OK\r\n"
-        "Content-Type: text/css; charset=utf-8\r\n"
+    return send_http_response(
+        socket, 
+        HTTP_STATUS_OK,
         "Connection: close\r\n"
-        "Content-Length: %ld\r\n"
-        "\r\n",
+        "Content-Type: text/css; charset=utf-8\r\n",
+        css_style,
         _sizeof_css_style
     );
-
-    if(ret < 0) return -1;
-
-    send(socket, buffer, ret, 0);
-    ret = 0;
-    do{
-        int tmp = send(socket, css_style + ret, _sizeof_css_style-ret, 0);
-        if(tmp<0) return -1;
-        ret += tmp;
-    }while ((size_t)ret != _sizeof_css_style);
-    return 0;
 }
 
 int html_index_callback(int socket, void* data){
-    int ret = 0;
-    char buffer[1024];
-
     // Segnalo che al compilatore che non uso la variabile data
     (void)data;
 
-    ret = snprintf(
-        buffer, 
-        sizeof(buffer), 
-        "HTTP/1.1 200 OK\r\n"
+    return send_http_response(
+        socket, 
+        HTTP_STATUS_OK,
         "Content-Type: text/html; charset=utf-8\r\n"
-        "Connection: close\r\n"
-        "Content-Length: %ld\r\n"
-        "\r\n",
+        "Connection: close\r\n",
+        html_page,
         _sizeof_html_page
     );
-
-    if(ret < 0) return -1;
-
-    send(socket, buffer, ret, 0);
-    ret = 0;
-    do{
-        int tmp = send(socket, html_page + ret, _sizeof_html_page-ret, 0);
-        if(tmp<0) return -1;
-        ret += tmp;
-    }while ((size_t)ret != _sizeof_html_page);
-    return 0;
 }
 
-/*** TEST ******************************************************************************/
+/* TEST ******************************************************************************/
 
 int test_callback(int socket, void* data){
-    int ret = 0;
-    char buffer[1024];
-
     // Segnalo che al compilatore che non uso la variabile data
     (void)data;
 
-    ret = snprintf(
-        buffer, 
-        sizeof(buffer), 
-        "HTTP/1.1 200 OK\r\n"
+    return send_http_response(
+        socket, 
+        HTTP_STATUS_OK,
         "Content-Type: text/html; charset=utf-8\r\n"
-        "Connection: close\r\n"
-        "Content-Length: %ld\r\n"
-        "\r\n",
+        "Connection: close\r\n",
+        test_page,
         _sizeof_test_page
     );
-
-    if(ret < 0) return -1;
-
-    send(socket, buffer, ret, 0);
-    ret = 0;
-    do{
-        int tmp = send(socket, test_page + ret, _sizeof_test_page-ret, 0);
-        if(tmp<0) return -1;
-        ret += tmp;
-    }while ((size_t)ret != _sizeof_test_page);
-    return 0;
 }
 
 int test0_callback(int socket, void* data){

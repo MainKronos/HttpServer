@@ -45,6 +45,8 @@ extern "C" {
 #include <stdbool.h>
 #include <pthread.h>
 
+/* GLOBAL DEFINITION *****************************************************************/
+
 #ifndef HTTP_MAX_URL_SIZE
 /** Dimenzione massima dell'url */
 #define HTTP_MAX_URL_SIZE 256
@@ -57,8 +59,10 @@ extern "C" {
 
 #ifndef HTTP_MAX_WORKERS
 /** Numero massimo di handlers */
-#define HTTP_MAX_WORKERS 10
+#define HTTP_MAX_WORKERS 3
 #endif
+
+/* UTILITY FUNCTIONS ************************************************************************/
 
 /** Importa un file all'interno del codice.
  * @param file Percorso del file da includere
@@ -82,6 +86,18 @@ __asm__( \
 extern __attribute__((aligned(16))) const size_t _sizeof_ ## sym; \
 extern __attribute__((aligned(16))) __attribute__((nonstring)) const uint8_t sym[]
 
+/** Invia una risposta HTTP 1.1
+ * @param socket Socket tcp dove inviare i dati
+ * @param status Stato HTTP della risposta
+ * @param header Header della risposta (opzionale, se NULL non viene incluso)
+ * @param content Dati del body da inviare (opzionale, se NULL non viene incluso)
+ * @param content_lenght Dimenzione del content
+ * @return 0 se non ci sono stati errori
+ */
+int send_http_response(int socket, enum http_status status, const char* header, const uint8_t* content, size_t content_lenght);
+
+/* HTTP SERVER TYPES ***************************************************************************/
+
 /** Funzione di callback
  * @param socket File Descriptor del socket
  * @param data puntatore a memoria dati definita dall'utente
@@ -98,10 +114,13 @@ struct HttpHandler {
 };
 
 enum HttpServerState {
-    HTTP_SERVER_STOPPED,
-    HTTP_SERVER_INITIALIZED,
-    HTTP_SERVER_RUNNING
+    HTTP_SERVER_STOPPED, /* Server fermo */
+    HTTP_SERVER_INITIALIZED, /* Server inizializzato */
+    HTTP_SERVER_RUNNING, /* Server in esecuzione */
+    HTTP_SERVER_STOPPING, /* Server in spegnimento */
 };
+
+/* HTTP SERVER FUNCTIONS ***********************************************************************************/
 
 /* Struttura del server */
 struct HttpServer {
@@ -112,8 +131,8 @@ struct HttpServer {
     enum HttpServerState _state; /* Indica lo stato del server */
     fd_set _master_set; /* Set con tutti i descrittori */
     struct HttpHandler _handlers[HTTP_MAX_HANDLERS]; /* lista degli handler */
-    pthread_t _workers[HTTP_MAX_WORKERS]; /* thread worker */
-    struct HttpRequestCtx* _data; /* Puntatore per lo scambio di dati tra i thread */
+    pthread_t _workers[HTTP_MAX_WORKERS]; /* thread dei worker */
+    struct HttpRequest* _data; /* Puntatore per lo scambio di dati tra i thread */
     pthread_mutex_t _mutex_sync; /* Mutex di sincronizzazione */
     pthread_cond_t _cond_sync; /* Varaibile cond di sincronizzazione */
 };

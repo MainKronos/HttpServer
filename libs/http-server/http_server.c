@@ -10,7 +10,7 @@
 /*** PRIVATE *******************************************************************/
 
 /* Struttura per il contesto della richiesta */
-struct HttpRequestCtx {
+struct HttpRequest {
     const struct HttpHandler* handlers; /* array con tutti gli handlers */
     HttpCallback callback; /* funzione da chiamare in caso di match */
     void* data; /* puntatore a memoria dati definita dall'utente in caso di match */
@@ -40,6 +40,55 @@ static void* http_worker_run(void* arg);
 static void http_server_cleanup(void* arg);
 
 /******************************************************************************/
+
+int send_http_response(int socket, enum http_status status, const char* header, const uint8_t* content, size_t content_lenght){
+    char buffer[HTTP_MAX_HEADER_SIZE]; /* Buffer per l'header */
+    size_t size; /* Content size*/
+    size_t sent; /* Byte inviati */
+    int ret;
+
+    ret = snprintf(
+        buffer,
+        sizeof(buffer),
+        "HTTP/1.1 %d %s\r\n"
+        "Content-Length: %ld\r\n",
+        status,
+        http_status_str(status),
+        content_lenght
+    );
+
+    if(ret < 0) return -1;
+
+    size =+ ret;
+
+    // Se è presente l'header
+    if(header != NULL){
+        strncpy(buffer + size, header, sizeof(buffer) - size);
+        size += strlen(header);
+    }
+    buffer[size++] = '\r';
+    buffer[size++] = '\n';
+
+    // Invio l'header
+    sent = 0;
+    do {
+        ret = send(socket, buffer + sent, size - sent, 0);
+        if(ret<0) return -1;
+        sent += ret;
+    } while (sent < size);
+
+    if(content == NULL) return 0;
+
+    // Invio il body
+    sent = 0;
+    do {
+        ret = send(socket, content + sent, content_lenght - sent, 0);
+        if(ret<0) return -1;
+        sent += ret;
+    } while (sent < content_lenght);
+
+    return 0;
+}
 
 int http_server_init(struct HttpServer* this, const char address[], uint16_t port){
     // Check iniziali
@@ -95,9 +144,8 @@ int http_server_stop(struct HttpServer* this){
     if(this->_state != HTTP_SERVER_RUNNING) return -1;
     if(this->_listener < 0) return -1;
 
-    printf("%s:%d closing...\r\n", inet_ntoa(this->_addr.sin_addr), ntohs(this->_addr.sin_port));
+    printf("%s:%d stopping...\r\n", inet_ntoa(this->_addr.sin_addr), ntohs(this->_addr.sin_port));
     fflush(stdout);
-    this->_state = HTTP_SERVER_STOPPED;
     if((ret = pthread_cancel(this->_thread)) != 0){
         fprintf(stderr, "%s:%d pthread_cancel error: %s\r\n", __FILE__, __LINE__,  strerror(ret));
         return -1;
@@ -117,7 +165,7 @@ static void http_server_cleanup(void* arg){
         fprintf(stderr, "%s:%d pthread_mutex_lock error: %s\r\n", __FILE__, __LINE__, strerror(ret));
     }
     // Indico che il server si stà spegnendo
-    this->_data = (void*)-1;
+    this->_state = HTTP_SERVER_STOPPING;
     if((ret = pthread_mutex_unlock(&this->_mutex_sync)) != 0){
         fprintf(stderr, "%s:%d pthread_mutex_unlock error: %s\r\n", __FILE__, __LINE__, strerror(ret));
     }
@@ -156,12 +204,15 @@ static void http_server_cleanup(void* arg){
         fprintf(stderr, "%s:%d close error: %s\r\n", __FILE__, __LINE__, strerror(errno));
     } 
     printf("%s:%d stopped\r\n", inet_ntoa(this->_addr.sin_addr), ntohs(this->_addr.sin_port));
+
+    // Indico che il server si è fermato
+    this->_state = HTTP_SERVER_STOPPED;
 }
 
 static void* http_worker_run(void* arg){
     struct HttpServer* this = (struct HttpServer*)arg;
     struct sockaddr_in addr; /* Indirizzo client */
-    struct HttpRequestCtx request_ctx; /* Contesto della richiesta */
+    struct HttpRequest request; /* Contesto della richiesta */
     int ret; /* Valore di ritorno delle funzioni */
     int state; /* Stato del thread */
 
@@ -173,19 +224,19 @@ static void* http_worker_run(void* arg){
             fprintf(stderr, "%s:%d pthread_mutex_lock error: %s\r\n", __FILE__, __LINE__, strerror(ret));
         }
         // Attendo di ricevere un nuovo job
-        while(this->_data == NULL){
+        while(this->_data == NULL && this->_state != HTTP_SERVER_STOPPING){
             if((ret = pthread_cond_wait(&this->_cond_sync, &this->_mutex_sync)) != 0){
                 fprintf(stderr, "%s:%d pthread_cond_wait error: %s\r\n", __FILE__, __LINE__, strerror(ret));
             }
         }
-        // Se i server mi ha notificato di terminare
-        if(this->_data == (void*)-1){
+        // Se i server si stà spegnendo
+        if(this->_state == HTTP_SERVER_STOPPING){
             if((ret = pthread_mutex_unlock(&this->_mutex_sync)) != 0){
                 fprintf(stderr, "%s:%d pthread_mutex_unlock error: %s\r\n", __FILE__, __LINE__, strerror(ret));
             }
             break;
         }else{
-            memcpy(&request_ctx, this->_data, sizeof(request_ctx));
+            memcpy(&request, this->_data, sizeof(request));
             this->_data = NULL;
             if((ret = pthread_mutex_unlock(&this->_mutex_sync)) != 0){
                 fprintf(stderr, "%s:%d pthread_mutex_unlock error: %s\r\n", __FILE__, __LINE__, strerror(ret));
@@ -195,18 +246,20 @@ static void* http_worker_run(void* arg){
             fprintf(stderr, "%s:%d pthread_cond_broadcast error: %s\r\n", __FILE__, __LINE__, strerror(ret));
         }       
         
-        request_ctx.callback(request_ctx.socket, request_ctx.data);
+        request.callback(request.socket, request.data);
 
-        // Controllo se il socket è stato chiuso erroneamente dall'utente
-        if(fcntl(request_ctx.socket, F_GETFL) != -1 || errno != EBADF){
-            if(getpeername(request_ctx.socket, (struct sockaddr *)&addr, &(socklen_t){sizeof(addr)}) == 0){
+        // Controllo se il socket è stato chiuso erroneamente nella callback
+        if(fcntl(request.socket, F_GETFL) != -1 || errno != EBADF){
+            if(getpeername(request.socket, (struct sockaddr *)&addr, &(socklen_t){sizeof(addr)}) == 0){
                 printf("%s:%d \e[31mdisconnected\e[0m\r\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
             } else fprintf(stderr, "%s:%d getpeername error: %s\r\n", __FILE__, __LINE__, strerror(errno));
 
-            if(close(request_ctx.socket) != 0) {
+            if(close(request.socket) != 0) {
                 fprintf(stderr, "%s:%d close error: %s\r\n", __FILE__, __LINE__, strerror(errno));
             }
-        }        
+        } else {
+            fprintf(stderr, "worker warning: socket [%d] closed on callback [%p].\r\n", request.socket, request.callback);
+        }      
     }
 
     pthread_exit(NULL);
@@ -217,10 +270,10 @@ static void* http_server_run(void* arg){
     struct HttpServer* this = (struct HttpServer*)arg;
     struct sockaddr_in addr; /* Indirizzo client */
     ssize_t recved; /* Bytes ricevuti */
-    char request[HTTP_MAX_URL_SIZE]; /* Buffer per la richiesta */
+    char buffer[HTTP_MAX_URL_SIZE + 20]; /* Buffer per la richiesta */
     http_parser parser; /* Istanza http parser */
     http_parser_settings settings; /* Istanza settings del parser */
-    struct HttpRequestCtx request_ctx; /* Contesto richiesta */
+    struct HttpRequest request; /* Contesto richiesta */
     int fd; /*Descrittore del Socket richiesta tcp */
     fd_set temp_set; /* Set che entra nella select */
     int i; /* Indice */
@@ -280,37 +333,23 @@ static void* http_server_run(void* arg){
                     pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &state);
 
                     // Pulisco il contesto della richiesta
-                    memset(&request_ctx, 0, sizeof(request_ctx));
-                    request_ctx.handlers = this->_handlers;
-                    request_ctx.callback = (void*)-1;
-                    request_ctx.socket = fd;
+                    memset(&request, 0, sizeof(request));
+                    request.handlers = this->_handlers;
+                    request.socket = fd;
 
                     // inizializzo il parser
                     http_parser_init(&parser, HTTP_REQUEST);
                     // passo il buffer dei dati al parser
-                    parser.data = (void*)&request_ctx;
+                    parser.data = (void*)&request;
 
                     // ricevo i dati senza toglierli dallo stream
-                    recved = recv(fd, request, sizeof(request), MSG_PEEK);
+                    recved = recv(fd, buffer, sizeof(buffer), MSG_PEEK);
 
                     // Controllo se la connessione è stata chiusa o c'è stato un errore
                     if(recved > 0){
-                        http_parser_execute(&parser, &settings, request, recved);
+                        http_parser_execute(&parser, &settings, buffer, recved);
 
-                        // Se non è stato trovato nessun handler
-                        if(request_ctx.callback == NULL){
-                            char response[] = 
-                                "HTTP/1.1 404 Not Found\r\n"
-                                "Content-Type: text/html; charset=utf-8\r\n"
-                                "Connection: close\r\n"
-                                "Content-Length: 0\r\n"
-                                "\r\n";
-                            // invio la risposta di errore
-                            if(send(fd, response, sizeof(response)-1, 0) < 0){
-                                fprintf(stderr, "%s:%d send error: %s\r\n", __FILE__, __LINE__, strerror(errno));
-                                break;
-                            } 
-                        } else // Se c'è stato un errore
+                        // Se c'è stato un errore
                         if(HTTP_PARSER_ERRNO(&parser)){
                             char response[512];
                             fprintf(
@@ -338,6 +377,20 @@ static void* http_server_run(void* arg){
                                 fprintf(stderr, "%s:%d send error: %s\r\n", __FILE__, __LINE__, strerror(errno));
                                 break;
                             } 
+                        } else 
+                        // Se non è stato trovato nessun handler
+                        if(request.callback == NULL){
+                            char response[] = 
+                                "HTTP/1.1 404 Not Found\r\n"
+                                "Content-Type: text/html; charset=utf-8\r\n"
+                                "Connection: close\r\n"
+                                "Content-Length: 0\r\n"
+                                "\r\n";
+                            // invio la risposta di errore
+                            if(send(fd, response, sizeof(response)-1, 0) < 0){
+                                fprintf(stderr, "%s:%d send error: %s\r\n", __FILE__, __LINE__, strerror(errno));
+                                break;
+                            } 
                         } else {
                             pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &state);
                             // Attendo lo slot per il contesto sia libero
@@ -352,14 +405,14 @@ static void* http_server_run(void* arg){
                                 }
                             }
                             // Aggiungo il nuovo contesto della richiesta da processare
-                            this->_data = &request_ctx;
+                            this->_data = &request;
                             // rimuovo il socket dal set
                             FD_CLR(fd, &this->_master_set);
                             if((ret = pthread_mutex_unlock(&this->_mutex_sync)) != 0){
                                 fprintf(stderr, "%s:%d pthread_mutex_unlock error: %s\r\n",__FILE__, __LINE__, strerror(ret));
                                 break;
                             }
-                            // Risveglio tutti un thread bloccato
+                            // Risveglio un thread bloccato
                             if((ret = pthread_cond_signal(&this->_cond_sync)) != 0){
                                 fprintf(stderr, "%s:%d pthread_cond_broadcast error: %s\r\n", __FILE__, __LINE__, strerror(ret));
                                 break;
@@ -425,7 +478,7 @@ int http_server_start(struct HttpServer* this){
             fprintf(stderr, "%s:%d pthread_mutex_lock error: %s\r\n", __FILE__, __LINE__, strerror(ret));
         }
         // Indico che il server si stà spegnendo
-        this->_data = (void*)-1;
+        this->_state = HTTP_SERVER_STOPPING;
         if((ret = pthread_mutex_unlock(&this->_mutex_sync)) != 0){
             fprintf(stderr, "%s:%d pthread_mutex_unlock error: %s\r\n", __FILE__, __LINE__, strerror(ret));
         }
@@ -488,7 +541,7 @@ int http_server_add_handler(struct HttpServer* this, const char* url, HttpCallba
 }
 
 static int http_parser_on_url(http_parser* parser, const char *at, size_t length){
-    struct HttpRequestCtx* ctx = (struct HttpRequestCtx*)parser->data; /* Contesto */
+    struct HttpRequest* requests = (struct HttpRequest*)parser->data; /* Contesto */
     struct sockaddr_in addr; /* Indirizzo client */
     struct http_parser_url parser_url; /* Url parser */
     int ret; /* Valore di ritorno */
@@ -499,25 +552,23 @@ static int http_parser_on_url(http_parser* parser, const char *at, size_t length
     if(ret != 0) return -1;
     
     // Stampo la richiesta ricevuto dal client
-    if(getpeername(ctx->socket, (struct sockaddr *)&addr, &(socklen_t){sizeof(addr)}) == 0){
+    if(getpeername(requests->socket, (struct sockaddr *)&addr, &(socklen_t){sizeof(addr)}) == 0){
         printf("%s:%d %s %.*s\r\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port), http_method_str(parser->method), (int)length, at);
     } else fprintf(stderr, "%s:%d getpeername error: %s\r\n", __FILE__, __LINE__, strerror(errno));
     
     // scorro tutti gli handler
     for(int i=0; i<HTTP_MAX_HANDLERS; i++){
         // se lo slot è valido
-        if(ctx->handlers[i]._callback != NULL){
-            if(strlen(ctx->handlers[i]._url) != parser_url.field_data[UF_PATH].len) continue;
-            ret = strncmp(ctx->handlers[i]._url, at + parser_url.field_data[UF_PATH].off, parser_url.field_data[UF_PATH].len);
+        if(requests->handlers[i]._callback != NULL){
+            if(strlen(requests->handlers[i]._url) != parser_url.field_data[UF_PATH].len) continue;
+            ret = strncmp(requests->handlers[i]._url, at + parser_url.field_data[UF_PATH].off, parser_url.field_data[UF_PATH].len);
             if(ret != 0) continue;
             // aggiorno il contesto della callback
-            ctx->callback = ctx->handlers[i]._callback;
-            ctx->data = ctx->handlers[i]._data;
+            requests->callback = requests->handlers[i]._callback;
+            requests->data = requests->handlers[i]._data;
             return 0;
         }
     }
-    // non ho trovato nulla
-    ctx->callback = NULL;
-    return -1;
+    return 0;
 }
 
