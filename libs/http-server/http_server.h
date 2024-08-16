@@ -59,7 +59,7 @@ extern "C" {
 
 #ifndef HTTP_MAX_WORKERS
 /** Numero massimo di handlers */
-#define HTTP_MAX_WORKERS 10
+#define HTTP_MAX_WORKERS 4
 #endif
 
 /* UTILITY FUNCTIONS ************************************************************************/
@@ -86,7 +86,7 @@ __asm__( \
 extern __attribute__((aligned(16))) const size_t _sizeof_ ## sym; \
 extern __attribute__((aligned(16))) __attribute__((nonstring)) const uint8_t sym[]
 
-/** Invia una risposta HTTP 1.1
+/** Invia una risposta HTTP/1.1
  * @param socket Socket tcp dove inviare i dati
  * @param status Stato HTTP della risposta
  * @param header Header della risposta (opzionale, se NULL non viene incluso)
@@ -94,14 +94,14 @@ extern __attribute__((aligned(16))) __attribute__((nonstring)) const uint8_t sym
  * @param content_lenght Dimenzione del content
  * @return 0 se non ci sono stati errori
  */
-int send_http_response(int socket, enum http_status status, const char* header, const uint8_t* content, size_t content_lenght);
+int send_http_response(int socket, enum http_status status, const char* header, const void* content, size_t content_lenght);
 
 /* HTTP SERVER TYPES ***************************************************************************/
 
 /** Funzione di callback
  * @param socket File Descriptor del socket
  * @param data puntatore a memoria dati definita dall'utente
- * @return Ritorna 0 per keep-alive altrimenti chiude la connessione
+ * @return Ritorna 0 se non ci sono stati errori
  */
 typedef int(*HttpCallback)(int socket, void* data);
 
@@ -145,7 +145,7 @@ struct HttpServer {
 */
 int http_server_init(struct HttpServer* this, const char address[], uint16_t port);
 
-/** Aggiunger un handler al server 
+/** Aggiunge un handler al server 
  * @param this Istanza dell'HttpServer
  * @param url Url di match
  * @param callback Funzione da chiamare in caso di match

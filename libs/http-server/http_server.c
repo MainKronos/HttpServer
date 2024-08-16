@@ -41,7 +41,7 @@ static void http_server_cleanup(void* arg);
 
 /******************************************************************************/
 
-int send_http_response(int socket, enum http_status status, const char* header, const uint8_t* content, size_t content_lenght){
+int send_http_response(int socket, enum http_status status, const char* header, const void* content, size_t content_lenght){
     char buffer[HTTP_MAX_HEADER_SIZE]; /* Buffer per l'header */
     size_t size; /* Content size*/
     size_t sent; /* Byte inviati */
@@ -77,7 +77,7 @@ int send_http_response(int socket, enum http_status status, const char* header, 
         sent += ret;
     } while (sent < size);
 
-    if(content == NULL) return 0;
+    if(content == NULL || content_lenght == 0) return 0;
 
     // Invio il body
     sent = 0;
@@ -161,9 +161,18 @@ static void http_server_cleanup(void* arg){
 
     FD_CLR(this->_listener, &this->_master_set);
 
+    if(close(this->_listener) != 0){
+        fprintf(stderr, "%s:%d close error: %s\r\n", __FILE__, __LINE__, strerror(errno));
+    }
+
     if((ret = pthread_mutex_lock(&this->_mutex_sync)) != 0){
         fprintf(stderr, "%s:%d pthread_mutex_lock error: %s\r\n", __FILE__, __LINE__, strerror(ret));
     }
+
+    // se mi è rimasto un socket pendente lo riaggiungo al set
+    if(this->_data != NULL) FD_SET(this->_data->socket, &this->_master_set);
+    this->_data = NULL;
+
     // Indico che il server si stà spegnendo
     this->_state = HTTP_SERVER_STOPPING;
     if((ret = pthread_mutex_unlock(&this->_mutex_sync)) != 0){
@@ -200,9 +209,7 @@ static void http_server_cleanup(void* arg){
         fprintf(stderr, "%s:%d pthread_mutex_destroy error: %s\r\n", __FILE__, __LINE__, strerror(ret));
     } 
 
-    if(close(this->_listener) != 0){
-        fprintf(stderr, "%s:%d close error: %s\r\n", __FILE__, __LINE__, strerror(errno));
-    } 
+    
     printf("%s:%d stopped\r\n", inet_ntoa(this->_addr.sin_addr), ntohs(this->_addr.sin_port));
 
     // Indico che il server si è fermato
@@ -229,6 +236,7 @@ static void* http_worker_run(void* arg){
                 fprintf(stderr, "%s:%d pthread_cond_wait error: %s\r\n", __FILE__, __LINE__, strerror(ret));
             }
         }
+
         // Se i server si stà spegnendo
         if(this->_state == HTTP_SERVER_STOPPING){
             if((ret = pthread_mutex_unlock(&this->_mutex_sync)) != 0){
@@ -241,25 +249,26 @@ static void* http_worker_run(void* arg){
             if((ret = pthread_mutex_unlock(&this->_mutex_sync)) != 0){
                 fprintf(stderr, "%s:%d pthread_mutex_unlock error: %s\r\n", __FILE__, __LINE__, strerror(ret));
             }
-        }
-        if((ret = pthread_cond_broadcast(&this->_cond_sync)) != 0){
-            fprintf(stderr, "%s:%d pthread_cond_broadcast error: %s\r\n", __FILE__, __LINE__, strerror(ret));
-        }       
-        
-        request.callback(request.socket, request.data);
 
-        // Controllo se il socket è stato chiuso erroneamente nella callback
-        if(fcntl(request.socket, F_GETFL) != -1 || errno != EBADF){
-            if(getpeername(request.socket, (struct sockaddr *)&addr, &(socklen_t){sizeof(addr)}) == 0){
-                printf("%s:%d \e[31mdisconnected\e[0m\r\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
-            } else fprintf(stderr, "%s:%d getpeername error: %s\r\n", __FILE__, __LINE__, strerror(errno));
-
-            if(close(request.socket) != 0) {
-                fprintf(stderr, "%s:%d close error: %s\r\n", __FILE__, __LINE__, strerror(errno));
+            if((ret = pthread_cond_broadcast(&this->_cond_sync)) != 0){
+                fprintf(stderr, "%s:%d pthread_cond_broadcast error: %s\r\n", __FILE__, __LINE__, strerror(ret));
             }
-        } else {
-            fprintf(stderr, "worker warning: socket [%d] closed on callback [%p].\r\n", request.socket, request.callback);
-        }      
+            // Eseguo la callback
+            request.callback(request.socket, request.data);
+
+            // Controllo se il socket è stato chiuso erroneamente nella callback
+            if(fcntl(request.socket, F_GETFL) != -1 || errno != EBADF){
+                if(getpeername(request.socket, (struct sockaddr *)&addr, &(socklen_t){sizeof(addr)}) == 0){
+                    printf("%s:%d \e[31mdisconnected\e[0m\r\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
+                } else fprintf(stderr, "%s:%d getpeername error: %s\r\n", __FILE__, __LINE__, strerror(errno));
+
+                if(close(request.socket) != 0) {
+                    fprintf(stderr, "%s:%d close error: %s\r\n", __FILE__, __LINE__, strerror(errno));
+                }
+            } else {
+                fprintf(stderr, "worker warning: socket [%d] closed on callback [%p].\r\n", request.socket, request.callback);
+            }
+        }
     }
 
     pthread_exit(NULL);
