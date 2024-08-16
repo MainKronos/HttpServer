@@ -6,29 +6,71 @@
 </head>
 
 <body>
-    <ul>
-        <li>TEST 0: <span id="test0">loading...</span></li>
-        <li>TEST 1: <span id="test1">loading...</span></li>
-        <li>TEST 2: <span id="test2">loading...</span></li>
-        <li>TEST 3: <span id="test3">loading...</span></li>
-        <li>TEST 4: <span id="test4">loading...</span></li>
-        <li>TEST 5: <span id="test5">loading...</span></li>
-        <li>TEST 6: <span id="test6">loading...</span></li>
-        <li>TEST 7: <span id="test7">loading...</span></li>
-        <li>TEST 8: <span id="test8">loading...</span></li>
-    </ul>
+    <header>
+        <h1>TEST</h1>
+    </header>
+
+    <main>
+        <article id="unit_test">
+            <h2>UNIT TEST</h2>
+            <ul>
+                <li><a href="/test/0" target="_blank">TEST 0</a>: <span>loading...</span></li>
+                <li><a href="/test/1" target="_blank">TEST 1</a>: <span>loading...</span></li>
+                <li><a href="/test/2" target="_blank">TEST 2</a>: <span>loading...</span></li>
+                <li><a href="/test/3" target="_blank">TEST 3</a>: <span>loading...</span></li>
+                <li><a href="/test/4" target="_blank">TEST 4</a>: <span>loading...</span></li>
+                <li><a href="/test/5" target="_blank">TEST 5</a>: <span>loading...</span></li>
+                <li><a href="/test/6" target="_blank">TEST 6</a>: <span>loading...</span></li>
+                <li><a href="/test/7" target="_blank">TEST 7</a>: <span>loading...</span></li>
+            </ul>
+            <button>Run</button>
+        </article>
+
+        <article id="performance_test">
+            <h2>PERFORMANCE TEST</h2>
+            <pre>TIME: <span></span></pre>
+            <button>Run</button>
+        </article>
+    </main>
+
     <script>
         window.addEventListener('load', async function () {
+            const unit_test = document.getElementById("unit_test");
 
-            for(let i=0; i<8; i++){
-                if((await fetch(`/test/${i}`)).ok) document.getElementById(`test${i}`).innerText = "OK";
-                else document.getElementById(`test${i}`).innerText = "KO";
-            }
+            unit_test.querySelector('button').addEventListener('click', async () => {
+                // reset
+                for (const elem of unit_test.querySelectorAll('li')) {
+                    elem.querySelector('a').title = "";
+                    elem.querySelector('span').style = "";
+                    elem.querySelector('span').innerText = "loading...";
+                }
 
-            if((await Promise.all(Array.from({ length: 10 }, (_, i) => fetch(`/test/8.${i}`)))).every((v) => v.ok)) 
-                document.getElementById("test8").innerText = "OK";
-            else
-                document.getElementById("test8").innerText = "KO";
+                // run
+                for (const elem of unit_test.querySelectorAll('li')) {
+                    const res = await fetch(elem.querySelector('a').href);
+                    if (res.ok) {
+                        elem.querySelector('a').title = res.headers.get("Content-Description");
+                        elem.querySelector('span').innerText = "PASS";
+                        elem.querySelector('span').style.color = "green";
+                    } else {
+                        elem.querySelector('span').innerText = "FAIL";
+                        elem.querySelector('span').style.color = "red";
+                    }
+                }
+
+            });
+
+            const performance_test = document.getElementById("performance_test");
+
+            performance_test.querySelector("button").addEventListener('click', async () => {
+                // reset
+                performance_test.querySelector('span').innerText = " - ";
+                const start = new Date().getTime();
+
+                await Promise.all(Array.from({ length: 10 }, (_, i) => fetch(`/lazy?id=${i}`)));
+
+                performance_test.querySelector('span').innerText = new Date().getTime() - start;
+            });
         });
     </script>
 </body>

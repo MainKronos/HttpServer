@@ -59,7 +59,7 @@ extern "C" {
 
 #ifndef HTTP_MAX_WORKERS
 /** Numero massimo di handlers */
-#define HTTP_MAX_WORKERS 3
+#define HTTP_MAX_WORKERS 10
 #endif
 
 /* UTILITY FUNCTIONS ************************************************************************/
