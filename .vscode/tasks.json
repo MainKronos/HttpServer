@@ -4,6 +4,7 @@
             "type": "shell",
             "label": "C/C++: makefile",
             "command": "make",
+            "args": ["debug"],
             "options": {
                 "cwd": "${workspaceFolder}"
             },

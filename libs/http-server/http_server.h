@@ -84,7 +84,7 @@ __asm__( \
     ".section \".text\" \n" \
 ); \
 extern __attribute__((aligned(16))) const size_t _sizeof_ ## sym; \
-extern __attribute__((aligned(16))) __attribute__((nonstring)) const uint8_t sym[]
+extern __attribute__((aligned(16))) __attribute__((nonstring)) const char sym[]
 
 /** Invia una risposta HTTP/1.1
  * @param socket Socket tcp dove inviare i dati
@@ -94,7 +94,7 @@ extern __attribute__((aligned(16))) __attribute__((nonstring)) const uint8_t sym
  * @param content_lenght Dimenzione del content
  * @return 0 se non ci sono stati errori
  */
-int send_http_response(int socket, enum http_status status, const char* header, const void* content, size_t content_lenght);
+int send_http_response(int socket, enum http_status status, const char* header, const char* content, size_t content_lenght);
 
 /* HTTP SERVER TYPES ***************************************************************************/
 

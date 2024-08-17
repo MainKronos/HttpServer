@@ -41,7 +41,7 @@ static void http_server_cleanup(void* arg);
 
 /******************************************************************************/
 
-int send_http_response(int socket, enum http_status status, const char* header, const void* content, size_t content_lenght){
+int send_http_response(int socket, enum http_status status, const char* header, const char* content, size_t content_lenght){
     char buffer[HTTP_MAX_HEADER_SIZE]; /* Buffer per l'header */
     size_t size; /* Content size*/
     size_t sent; /* Byte inviati */
@@ -187,7 +187,7 @@ static void http_server_cleanup(void* arg){
     for(int i=0; i<FD_SETSIZE; i++){
         if(FD_ISSET(i, &this->_master_set)){
             if(getpeername(i, (struct sockaddr *)&addr, &(socklen_t){sizeof(addr)}) == 0){
-                printf("%s:%d \e[31mdisconnected\e[0m\r\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
+                printf("%s:%d \x1b[31mdisconnected\x1b[0m\r\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
             } else fprintf(stderr, "%s:%d getpeername error: %s\r\n", __FILE__, __LINE__, strerror(errno));
             if(close(i) != 0) {
                 fprintf(stderr, "%s:%d, close error: %s\r\n", __FILE__, __LINE__, strerror(errno));
@@ -259,14 +259,14 @@ static void* http_worker_run(void* arg){
             // Controllo se il socket è stato chiuso erroneamente nella callback
             if(fcntl(request.socket, F_GETFL) != -1 || errno != EBADF){
                 if(getpeername(request.socket, (struct sockaddr *)&addr, &(socklen_t){sizeof(addr)}) == 0){
-                    printf("%s:%d \e[31mdisconnected\e[0m\r\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
+                    printf("%s:%d \x1b[31mdisconnected\x1b[0m\r\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
                 } else fprintf(stderr, "%s:%d getpeername error: %s\r\n", __FILE__, __LINE__, strerror(errno));
 
                 if(close(request.socket) != 0) {
                     fprintf(stderr, "%s:%d close error: %s\r\n", __FILE__, __LINE__, strerror(errno));
                 }
             } else {
-                fprintf(stderr, "worker warning: socket [%d] closed on callback [%p].\r\n", request.socket, request.callback);
+                fprintf(stderr, "worker warning: socket [%d] closed on callback.\r\n", request.socket);
             }
         }
     }
@@ -314,7 +314,7 @@ static void* http_server_run(void* arg){
                     // Aggiungo il nuovo socket al set
                     if((fd = accept(this->_listener, (struct sockaddr *)&addr, &(socklen_t){sizeof(addr)})) >= 0 ){
                         FD_SET(fd, &this->_master_set);
-                        printf("%s:%d \e[32mconnected\e[0m\r\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
+                        printf("%s:%d \x1b[32mconnected\x1b[0m\r\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
                     } else{
                         fprintf(stderr, "%s:%d accept error: %s\r\n", __FILE__, __LINE__, strerror(errno));
                         break;
@@ -436,7 +436,7 @@ static void* http_server_run(void* arg){
                     } 
 
                     if(getpeername(fd, (struct sockaddr *)&addr, &(socklen_t){sizeof(addr)}) == 0){
-                        printf("%s:%d \e[31mdisconnected\e[0m\r\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
+                        printf("%s:%d \x1b[31mdisconnected\x1b[0m\r\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
                     } else fprintf(stderr, "%s:%d getpeername error: %s\r\n", __FILE__, __LINE__, strerror(errno));
 
                     // rimuovo il socket dal set
