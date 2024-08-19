@@ -25,6 +25,7 @@ int main(int argc, char* argv[]) {
 	if(http_server_add_handler(&server, "/stop", close_callback, &server)) return -1;
 	if(http_server_add_handler(&server, "/test", html_test_callback, NULL)) return -1;
 	if(http_server_add_handler(&server, "/lazy", lazy_image_callback, (void*)10)) return -1;
+	if(http_server_add_handler(&server, "/auth", auth_callback, NULL)) return -1;
 
 	if(http_server_add_handler(&server, "/test/0", test0_callback, NULL)) return -1;
 	if(http_server_add_handler(&server, "/test/1", test1_callback, NULL)) return -1;

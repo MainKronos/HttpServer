@@ -18,6 +18,9 @@ int lazy_image_callback(int socket, void* data);
 /* Invia tramite http la pagina con tutti i test */
 int html_test_callback(int socket, void* data);
 
+/* Basic Auth */
+int auth_callback(int socket, void* data);
+
 int test0_callback(int socket, void* data);
 int test1_callback(int socket, void* data);
 int test2_callback(int socket, void* data);

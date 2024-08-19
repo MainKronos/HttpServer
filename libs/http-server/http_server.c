@@ -42,40 +42,62 @@ static void http_server_cleanup(void* arg);
 /******************************************************************************/
 
 int send_http_response(int socket, enum http_status status, const char* header, const char* content, size_t content_lenght){
-    char buffer[HTTP_MAX_HEADER_SIZE]; /* Buffer per l'header */
+    char* buffer; /* Buffer per l'header */
     size_t size; /* Content size*/
     size_t sent; /* Byte inviati */
-    int ret;
+    int ret; /* Retorno funzioni */
+
+    /* Format dell'header per la sprintf */
+    const char header_format[] = 
+        "HTTP/1.1 %d %s\r\n"
+        "Content-Length: %ld\r\n"
+        "%s\r\n";
+
+    if(header == NULL) header = "";
 
     ret = snprintf(
-        buffer,
-        sizeof(buffer),
-        "HTTP/1.1 %d %s\r\n"
-        "Content-Length: %ld\r\n",
+        NULL, 0,
+        header_format,
         status,
         http_status_str(status),
-        content_lenght
+        content_lenght,
+        header
     );
 
     if(ret < 0) return -1;
+    size =+ ret + 1; // ret + '\0'
 
-    size =+ ret;
-
-    // Se è presente l'header
-    if(header != NULL){
-        strncpy(buffer + size, header, sizeof(buffer) - size);
-        size += strlen(header);
+    if((buffer = malloc(size)) == NULL){
+        fprintf(stderr, "%s:%d malloc error: %s\r\n", __FILE__, __LINE__, strerror(errno));
+        return -1;
     }
-    buffer[size++] = '\r';
-    buffer[size++] = '\n';
+
+    ret = snprintf(
+        buffer, size,
+        header_format,
+        status,
+        http_status_str(status),
+        content_lenght,
+        header
+    );
+
+    if(ret < 0){
+        free(buffer);
+        return -1;
+    }
 
     // Invio l'header
     sent = 0;
     do {
         ret = send(socket, buffer + sent, size - sent, 0);
-        if(ret<0) return -1;
+        if(ret < 0){
+            free(buffer);
+            return -1;
+        } 
         sent += ret;
     } while (sent < size);
+
+    free(buffer);
 
     if(content == NULL || content_lenght == 0) return 0;
 
@@ -209,7 +231,6 @@ static void http_server_cleanup(void* arg){
         fprintf(stderr, "%s:%d pthread_mutex_destroy error: %s\r\n", __FILE__, __LINE__, strerror(ret));
     } 
 
-    
     printf("%s:%d stopped\r\n", inet_ntoa(this->_addr.sin_addr), ntohs(this->_addr.sin_port));
 
     // Indico che il server si è fermato

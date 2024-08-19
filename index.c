@@ -129,6 +129,109 @@ int html_test_callback(int socket, void* data){
     );
 }
 
+/* AUTH ********************************************************************************/
+
+struct auth_callback_data {
+    bool authorization_header;
+    const char* authorization;
+    size_t authorization_length;
+};
+
+
+static int auth_callback_on_header_field(http_parser* parser, const char* at, size_t length){
+    struct auth_callback_data* data = (struct auth_callback_data*)parser->data;
+    const char authorization_header[] = "Authorization";
+    if(data->authorization_header) return 0;
+    if(length != sizeof(authorization_header) - 1) return 0;
+    if(strncmp(authorization_header, at, length) != 0) return 0;
+    data->authorization_header = true;
+    return 0;
+}
+
+static int auth_callback_on_header_value(http_parser* parser, const char* at, size_t length){
+    struct auth_callback_data* data = (struct auth_callback_data*)parser->data;
+    if(!data->authorization_header) return 0;
+    if(data->authorization != NULL) return 0;
+    data->authorization = at;
+    data->authorization_length = length;
+    return 0;
+}
+
+int auth_callback(int socket, void* data){
+    ssize_t ret;
+    ssize_t size;
+    http_parser parser;
+    http_parser_settings settings;
+    struct auth_callback_data auth_data;
+    char buffer[HTTP_MAX_HEADER_SIZE];
+    const char pass[] = "Basic YWRtaW46YWRtaW4="; // admin admin
+
+    // Segnalo che al compilatore che non uso la variabile data
+    (void)data;
+
+    // ricevo il messaggio
+    size = 0;
+    while(1){
+        ret = recv(socket, buffer + size, sizeof(buffer) - size, MSG_DONTWAIT);
+        if(ret == -1) break;
+        size += ret;
+        if((size_t)size >= sizeof(buffer) || errno != EWOULDBLOCK) break;
+    }
+
+    http_parser_settings_init(&settings);
+    settings.on_header_field = auth_callback_on_header_field;
+    settings.on_header_value = auth_callback_on_header_value;
+
+    http_parser_init(&parser, HTTP_REQUEST);
+    memset(&auth_data, 0, sizeof(auth_data));
+    parser.data = (void*)&auth_data;
+
+    http_parser_execute(&parser, &settings, buffer, size);
+
+    // Se ho trovato l'header di authorization
+    if(auth_data.authorization_header && auth_data.authorization != NULL){
+        // Se la password corrisponde 
+        if(strncmp(pass, auth_data.authorization, auth_data.authorization_length) == 0){
+            strncpy(
+                buffer,
+                "HTTP/1.1 200 OK\r\n"
+                "Content-Type: text/html; charset=utf-8\r\n"
+                "Connection: close\r\n"
+                "Content-Length: 2\r\n"
+                "\r\n"
+                "OK",
+                sizeof(buffer)
+            );
+        }else{
+            strncpy(
+                buffer,
+                "HTTP/1.1 401 Unauthorized\r\n"
+                "Content-Type: text/html; charset=utf-8\r\n"
+                "Connection: close\r\n"
+                "Content-Length: 12\r\n"
+                "\r\n"
+                "Unauthorized",
+                sizeof(buffer)
+            );
+        }
+    }else{
+        strncpy(
+            buffer,
+            "HTTP/1.1 401 Unauthorized\r\n"
+            "Content-Type: text/html; charset=utf-8\r\n"
+            "WWW-Authenticate: Basic realm=\"User Visible Realm\"\r\n"
+            "Connection: close\r\n"
+            "Content-Length: 0\r\n"
+            "\r\n",
+            sizeof(buffer)
+        );
+    }
+
+    send(socket, buffer, strlen(buffer), 0);
+
+    return 0;
+}
+
 /* TEST ******************************************************************************/
 
 int test0_callback(int socket, void* data){
