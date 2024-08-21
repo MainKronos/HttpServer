@@ -47,11 +47,6 @@ extern "C" {
 
 /* GLOBAL DEFINITION *****************************************************************/
 
-#ifndef HTTP_MAX_URL_SIZE
-/** Dimenzione massima dell'url */
-#define HTTP_MAX_URL_SIZE 256
-#endif
-
 #ifndef HTTP_MAX_HANDLERS
 /** Numero massimo di handlers */
 #define HTTP_MAX_HANDLERS 128
@@ -67,7 +62,8 @@ extern "C" {
 /** Importa un file all'interno del codice.
  * @param file Percorso del file da includere
  * @param sym Simbolo da usare per creare il puntatore al file 
- * @return sym e _sizeof_sym che indicano lindirizzo di memoria e la grandezza del file
+ * @return sym (indirizzo di memoria) e _sizeof_sym (grandezza del file)
+ * @note Se in uso lo standard c23, allora è consigliato utilizzare la direttiva `#embed`.
  */
 #define IMPORT_FILE(file, sym) \
 __asm__( \

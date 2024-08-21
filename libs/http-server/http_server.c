@@ -300,7 +300,7 @@ static void* http_server_run(void* arg){
     struct HttpServer* this = (struct HttpServer*)arg;
     struct sockaddr_in addr; /* Indirizzo client */
     ssize_t recved; /* Bytes ricevuti */
-    char buffer[HTTP_MAX_URL_SIZE + 20]; /* Buffer per la richiesta */
+    char buffer[HTTP_MAX_HEADER_SIZE]; /* Buffer per la richiesta */
     http_parser parser; /* Istanza http parser */
     http_parser_settings settings; /* Istanza settings del parser */
     struct HttpRequest request; /* Contesto richiesta */

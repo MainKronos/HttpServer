@@ -1,8 +1,16 @@
 # HttpServer
 Micro http library written in c [UNIX]
 
+## Utilizzo
+1. Copiare i file `libs/http-server/http_server.c`, `libs/http-server/http_server.h`, `libs/http-parser/http_parser.c`, `libs/http-parser/http_parser.h` in una cartella ad esempio `libraries`.
+2. Creare un file `main.c` dove includere le dipendenze (`#include <http_server.h>`)
+3. Compilare usando il comando `gcc -Ilibraries libraries/http_server.c libraries/http_parser.c main.c`
+4. Enjoy
 
 ## Example
+
+Alcuni esempi di callback si trovano nei file `index.h` e `index.c`.
+
 ```c
 #include <http_server.h>
 #include <stdlib.h>
@@ -10,36 +18,30 @@ Micro http library written in c [UNIX]
 #include <errno.h>
 
 int html_index_callback(int socket, void* data){
-    char buffer[1024];
-
-    // recv all request data
-    while((recv(socket, buffer, sizeof(buffer), MSG_DONTWAIT) != -1 && errno != EWOULDBLOCK));
-
     // make response
-    strncpy(
-        buffer, 
+    char buffer[] =
         "HTTP/1.1 200 OK\r\n"
         "Content-Type: text/html; charset=utf-8\r\n"
         "Content-Length: 5\r\n"
         "Connection: keep-alive\r\n"
         "\r\n"
-        "INDEX",
-        sizeof(buffer)
-    );
+        "INDEX";
 
     // send response
-    send(socket, buffer, strlen(buffer), 0);
+    send(socket, buffer, sizeof(buffer) - 1, 0);
 
-    // ret == 0 -> keep-alive,
-    // ret != 0 -> close
     return 0;
 }
 
 int main(){
     struct HttpServer server;
 
-    if(http_server_init(&server, NULL, 8080)) return -1;
+    if(http_server_init(&server, "127.0.0.1", 8080)) return -1;
     if(http_server_add_handler(&server, "/", html_index_callback, NULL)) return -1;
-    if(http_server_run(&server)) return -1;
+    if(http_server_start(&server)) return -1;
+
+    /* other jobs */
+
+    return http_server_join(&server);
 }
 ```

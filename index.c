@@ -199,7 +199,7 @@ int auth_callback(int socket, void* data){
                 "Connection: close\r\n"
                 "Content-Length: 2\r\n"
                 "\r\n"
-                "OK",
+                "Welcome",
                 sizeof(buffer)
             );
         }else{
@@ -222,7 +222,8 @@ int auth_callback(int socket, void* data){
             "WWW-Authenticate: Basic realm=\"User Visible Realm\"\r\n"
             "Connection: close\r\n"
             "Content-Length: 0\r\n"
-            "\r\n",
+            "\r\n"
+            "Unauthorized",
             sizeof(buffer)
         );
     }
