@@ -9,7 +9,7 @@
 
 /*** PRIVATE *******************************************************************/
 
-/* Struttura per il contesto della richiesta */
+/** Struttura per il contesto della richiesta */
 struct HttpRequest {
     const struct HttpHandler* handlers; /* array con tutti gli handlers */
     HttpCallback callback; /* funzione da chiamare in caso di match */
@@ -17,24 +17,28 @@ struct HttpRequest {
     int socket; /* Descrittore del socket della comunicazione tcp */
 };
 
-/** Funzione chiamata quando il parser trova un url
+/** 
+ * @brief Funzione chiamata quando il parser trova un url
  * @param parser Istanza http_parser
  * @param at indirizzo inizio stringa url
  * @param length Lunghezza stringa url
  */
 static int http_parser_on_url(http_parser* parser, const char *at, size_t length);
 
-/** Funzione del server 
+/** 
+ * @brief Funzione del server 
  * @param arg struct HttpServer*
 */
 static void* http_server_run(void* arg);
 
-/** Funzione del worker 
+/** 
+ * @brief Funzione del worker 
  * @param arg struct HttpServer*
 */
 static void* http_worker_run(void* arg);
 
-/** Funzione di cleanup del server 
+/** 
+ * @brief Funzione di cleanup del server 
  * @param arg struct HttpServer*
 */
 static void http_server_cleanup(void* arg);
