@@ -9,13 +9,6 @@
 
 /*** PRIVATE *******************************************************************/
 
-/** Struttura per il contesto della richiesta */
-struct HttpRequest {
-    const struct HttpHandler* handlers; /* array con tutti gli handlers */
-    HttpCallback callback; /* funzione da chiamare in caso di match */
-    void* data; /* puntatore a memoria dati definita dall'utente in caso di match */
-    int socket; /* Descrittore del socket della comunicazione tcp */
-};
 
 /** 
  * @brief Funzione chiamata quando il parser trova un url
@@ -195,9 +188,13 @@ static void http_server_cleanup(void* arg){
         fprintf(stderr, "%s:%d pthread_mutex_lock error: %s\r\n", __FILE__, __LINE__, strerror(ret));
     }
 
-    // se mi è rimasto un socket pendente lo riaggiungo al set
-    if(this->_data != NULL) FD_SET(this->_data->socket, &this->_master_set);
-    this->_data = NULL;
+    // se mi sono rimasti socket pendenti li riaggiungo al set
+    for(int slot = 0; slot < HTTP_MAX_WORKERS; slot++){
+        if(this->_requests[slot].state == HTTP_WORKER_REQUEST_READY){
+            FD_SET(this->_requests[slot].socket, &this->_master_set);
+            this->_requests[slot].state = HTTP_WORKER_REQUEST_EMPTY;
+        }
+    }
 
     // Indico che il server si stà spegnendo
     this->_state = HTTP_SERVER_STOPPING;
@@ -244,55 +241,84 @@ static void http_server_cleanup(void* arg){
 static void* http_worker_run(void* arg){
     struct HttpServer* this = (struct HttpServer*)arg;
     struct sockaddr_in addr; /* Indirizzo client */
-    struct HttpRequest request; /* Contesto della richiesta */
+    struct HttpRequest* request; /* Contesto della richiesta */
     int ret; /* Valore di ritorno delle funzioni */
     int state; /* Stato del thread */
 
     pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &state);
 
     while(1){
-        
+        // Resetto il puntatore
+        request = NULL;
+
         if((ret = pthread_mutex_lock(&this->_mutex_sync)) != 0) {
             fprintf(stderr, "%s:%d pthread_mutex_lock error: %s\r\n", __FILE__, __LINE__, strerror(ret));
         }
-        // Attendo di ricevere un nuovo job
-        while(this->_data == NULL && this->_state != HTTP_SERVER_STOPPING){
+
+        // Attendo di ricevere un nuova richiesta
+        while(true){
+            for(int slot = 0; slot < HTTP_MAX_WORKERS; slot++){
+                if(this->_requests[slot].state == HTTP_WORKER_REQUEST_READY){
+                    // mi salvo il puntatore
+                    request = &this->_requests[slot];
+                    break;
+                } 
+            }
+            // se  ho trovato uno slot libero o il server si stà spegnendo
+            if(request != NULL || this->_state == HTTP_SERVER_STOPPING) break;
+
+            // Attendo
             if((ret = pthread_cond_wait(&this->_cond_sync, &this->_mutex_sync)) != 0){
                 fprintf(stderr, "%s:%d pthread_cond_wait error: %s\r\n", __FILE__, __LINE__, strerror(ret));
+                break;
             }
         }
 
-        // Se i server si stà spegnendo
-        if(this->_state == HTTP_SERVER_STOPPING){
+        // Se c'è stato un errore o il server si stà spegnendo
+        if(request == NULL || this->_state == HTTP_SERVER_STOPPING){
             if((ret = pthread_mutex_unlock(&this->_mutex_sync)) != 0){
                 fprintf(stderr, "%s:%d pthread_mutex_unlock error: %s\r\n", __FILE__, __LINE__, strerror(ret));
             }
             break;
         }else{
-            memcpy(&request, this->_data, sizeof(request));
-            this->_data = NULL;
+            // Aggiorno lo stato della richiesta
+            request->state = HTTP_WORKER_REQUEST_RUNNING;
+            if((ret = pthread_mutex_unlock(&this->_mutex_sync)) != 0){
+                fprintf(stderr, "%s:%d pthread_mutex_unlock error: %s\r\n", __FILE__, __LINE__, strerror(ret));
+            }
+            
+            // Eseguo la callback
+            request->callback(request->socket, request->data);
+
+            // Controllo se il socket è stato chiuso erroneamente nella callback
+            if(fcntl(request->socket, F_GETFL) != -1 || errno != EBADF){
+                if(getpeername(request->socket, (struct sockaddr *)&addr, &(socklen_t){sizeof(addr)}) == 0){
+                    printf("%s:%d \x1b[31mdisconnected\x1b[0m\r\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
+                } else fprintf(stderr, "%s:%d getpeername error: %s\r\n", __FILE__, __LINE__, strerror(errno));
+
+                if(close(request->socket) != 0) {
+                    fprintf(stderr, "%s:%d close error: %s\r\n", __FILE__, __LINE__, strerror(errno));
+                }
+            } else {
+                fprintf(stderr, "worker warning: socket [%d] closed on callback.\r\n", request->socket);
+            }
+            
+            if((ret = pthread_mutex_lock(&this->_mutex_sync)) != 0) {
+                fprintf(stderr, "%s:%d pthread_mutex_lock error: %s\r\n", __FILE__, __LINE__, strerror(ret));
+            }
+
+            // rilascio lo slot
+            request->state = HTTP_WORKER_REQUEST_EMPTY;
+
             if((ret = pthread_mutex_unlock(&this->_mutex_sync)) != 0){
                 fprintf(stderr, "%s:%d pthread_mutex_unlock error: %s\r\n", __FILE__, __LINE__, strerror(ret));
             }
 
+            // Risveglio il server che potrebbe essere in attesa di uno slot libero
             if((ret = pthread_cond_broadcast(&this->_cond_sync)) != 0){
                 fprintf(stderr, "%s:%d pthread_cond_broadcast error: %s\r\n", __FILE__, __LINE__, strerror(ret));
             }
-            // Eseguo la callback
-            request.callback(request.socket, request.data);
 
-            // Controllo se il socket è stato chiuso erroneamente nella callback
-            if(fcntl(request.socket, F_GETFL) != -1 || errno != EBADF){
-                if(getpeername(request.socket, (struct sockaddr *)&addr, &(socklen_t){sizeof(addr)}) == 0){
-                    printf("%s:%d \x1b[31mdisconnected\x1b[0m\r\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
-                } else fprintf(stderr, "%s:%d getpeername error: %s\r\n", __FILE__, __LINE__, strerror(errno));
-
-                if(close(request.socket) != 0) {
-                    fprintf(stderr, "%s:%d close error: %s\r\n", __FILE__, __LINE__, strerror(errno));
-                }
-            } else {
-                fprintf(stderr, "worker warning: socket [%d] closed on callback.\r\n", request.socket);
-            }
         }
     }
 
@@ -307,9 +333,9 @@ static void* http_server_run(void* arg){
     char buffer[HTTP_MAX_HEADER_SIZE]; /* Buffer per la richiesta */
     http_parser parser; /* Istanza http parser */
     http_parser_settings settings; /* Istanza settings del parser */
-    struct HttpRequest request; /* Contesto richiesta */
     int fd; /*Descrittore del Socket richiesta tcp */
     fd_set temp_set; /* Set che entra nella select */
+    struct HttpRequest request; /* Contesto della richiesta */
     int i; /* Indice */
     int ret; /* Valore di ritorno delle funzioni */
     int state; /* Stato del thread */
@@ -348,39 +374,22 @@ static void* http_server_run(void* arg){
                 else {
                     fd = i;
 
-                    // Attendo che il contesto della richiesta sia stato prelevato
-                    pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &state);
-                    if((ret = pthread_mutex_lock(&this->_mutex_sync)) != 0){
-                        fprintf(stderr, "%s:%d pthread_mutex_lock error: %s\r\n", __FILE__, __LINE__, strerror(ret));
-                        break;
-                    }
-                    while(this->_data != NULL){
-                        if((ret = pthread_cond_wait(&this->_cond_sync, &this->_mutex_sync)) != 0){
-                            fprintf(stderr, "%s:%d pthread_cond_wait error: %s\r\n", __FILE__, __LINE__, strerror(ret));
-                            break;
-                        }
-                    }   
-                    if((ret = pthread_mutex_unlock(&this->_mutex_sync)) != 0){
-                        fprintf(stderr, "%s:%d pthread_mutex_unlock error: %s\r\n", __FILE__, __LINE__, strerror(ret));
-                        break;
-                    }    
-                    pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &state);
-
-                    // Pulisco il contesto della richiesta
-                    memset(&request, 0, sizeof(request));
-                    request.handlers = this->_handlers;
-                    request.socket = fd;
-
-                    // inizializzo il parser
-                    http_parser_init(&parser, HTTP_REQUEST);
-                    // passo il buffer dei dati al parser
-                    parser.data = (void*)&request;
-
                     // ricevo i dati senza toglierli dallo stream
                     recved = recv(fd, buffer, sizeof(buffer), MSG_PEEK);
 
                     // Controllo se la connessione è stata chiusa o c'è stato un errore
                     if(recved > 0){
+
+                        // Pulisco il contesto della richiesta
+                        memset(&request, 0, sizeof(request));
+                        request.handlers = this->_handlers;
+                        request.socket = fd;
+
+                        // inizializzo il parser
+                        http_parser_init(&parser, HTTP_REQUEST);
+                        // passo il buffer dei dati al parser
+                        parser.data = (void*)&request;
+
                         http_parser_execute(&parser, &settings, buffer, recved);
 
                         // Se c'è stato un errore
@@ -430,20 +439,38 @@ static void* http_server_run(void* arg){
                                 break;
                             } 
                         } else {
+                            /** Slot libero per la richiesta */
+                            int slot;
+
                             pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &state);
                             // Attendo lo slot per il contesto sia libero
                             if((ret = pthread_mutex_lock(&this->_mutex_sync)) != 0){
                                 fprintf(stderr, "%s:%d pthread_mutex_lock error: %s\r\n", __FILE__, __LINE__, strerror(ret));
                                 break;
                             }
-                            while(this->_data != NULL){
-                                if((ret = pthread_cond_wait(&this->_cond_sync, &this->_mutex_sync)) != 0){
-                                    fprintf(stderr, "%s:%d pthread_cond_wait error: %s\r\n", __FILE__, __LINE__, strerror(ret));
-                                    break;
+
+                            // Cerco uno slot libero
+                            while(true){
+                                for(slot = 0; slot < HTTP_MAX_WORKERS; slot++){
+                                    if(this->_requests[slot].state == HTTP_WORKER_REQUEST_EMPTY) break;
                                 }
-                            }
-                            // Aggiungo il nuovo contesto della richiesta da processare
-                            this->_data = &request;
+                                // se non ho trovato uno slot libero
+                                if(slot == HTTP_MAX_WORKERS){
+                                    // Attendo
+                                    if((ret = pthread_cond_wait(&this->_cond_sync, &this->_mutex_sync)) != 0){
+                                        fprintf(stderr, "%s:%d pthread_cond_wait error: %s\r\n", __FILE__, __LINE__, strerror(ret));
+                                        break;
+                                    }
+                                } else break;
+                            };
+
+                            // Se c'è stato un errore
+                            if(slot == HTTP_MAX_WORKERS) break;
+
+                            // Aggiorno la richiesta
+                            request.state = HTTP_WORKER_REQUEST_READY;
+                            memcpy(&this->_requests[slot], &request, sizeof(request));
+
                             // rimuovo il socket dal set perchè verrà chiuso all'interno del worker
                             FD_CLR(fd, &this->_master_set);
                             if((ret = pthread_mutex_unlock(&this->_mutex_sync)) != 0){

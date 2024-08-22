@@ -53,7 +53,7 @@ extern "C" {
 #endif
 
 #ifndef HTTP_MAX_WORKERS
-/** Numero massimo di handlers */
+/** Numero massimo di worker */
 #define HTTP_MAX_WORKERS 4
 #endif
 
@@ -129,6 +129,35 @@ enum HttpServerState {
     HTTP_SERVER_STOPPING
 };
 
+/** Stato della richiesta http */
+enum HttpRequestState {
+    /** @privatesection */
+
+    /** Slot richiesta vuoto */
+    HTTP_WORKER_REQUEST_EMPTY,
+    /** Richiesta pronta per essere processata */
+    HTTP_WORKER_REQUEST_READY,
+    /** Richiesta in esecuzione */
+    HTTP_WORKER_REQUEST_RUNNING
+};
+
+/** Struttura per il contesto della richiesta */
+struct HttpRequest {
+    /** @privatesection */
+
+    /** Descrittore del socket della comunicazione tcp */
+    int socket; 
+    /** lista degli handler */
+    const struct HttpHandler* handlers; 
+    /** funzione da chiamare in caso di match */
+    HttpCallback callback;
+    /** puntatore a memoria dati definita dall'utente in caso di match */
+    void* data;
+    /** Stato della richiesta */
+    enum HttpRequestState state;
+};
+
+
 /* HTTP SERVER FUNCTIONS ***********************************************************************************/
 
 /** Struttura del server */
@@ -149,8 +178,8 @@ struct HttpServer {
     struct HttpHandler _handlers[HTTP_MAX_HANDLERS]; 
     /** thread dei worker */
     pthread_t _workers[HTTP_MAX_WORKERS]; 
-    /** Puntatore per lo scambio di dati tra i thread */
-    struct HttpRequest* _data; 
+    /** Jobs in esecuzione dai worker */
+    struct HttpRequest _requests[HTTP_MAX_WORKERS]; 
     /** Mutex di sincronizzazione */
     pthread_mutex_t _mutex_sync; 
     /** Varaibile cond di sincronizzazione */
