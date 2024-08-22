@@ -398,7 +398,7 @@ static void* http_server_run(void* arg){
                                 sizeof(response),
                                 "HTTP/1.1 500 Internal Server Error\r\n"
                                 "Content-Type: text/html; charset=utf-8\r\n"
-                                "Connection: close\r\n"
+                                "Connection: keep-alive\r\n"
                                 "Content-Length: %ld\r\n"
                                 "\r\n"
                                 "[%s] %s",
@@ -406,6 +406,8 @@ static void* http_server_run(void* arg){
                                 http_errno_name(HTTP_PARSER_ERRNO(&parser)),
                                 http_errno_description(HTTP_PARSER_ERRNO(&parser))
                             );
+                            // svuoto il buffer perchè non mi serve
+                            while((ret = recv(fd, buffer, sizeof(buffer), MSG_DONTWAIT) != -1 && errno != EWOULDBLOCK));
                             // invio la risposta di errore
                             if(send(fd, response, ret, 0) < 0){
                                 fprintf(stderr, "%s:%d send error: %s\r\n", __FILE__, __LINE__, strerror(errno));
@@ -417,11 +419,13 @@ static void* http_server_run(void* arg){
                             char response[] = 
                                 "HTTP/1.1 404 Not Found\r\n"
                                 "Content-Type: text/html; charset=utf-8\r\n"
-                                "Connection: close\r\n"
+                                "Connection: keep-alive\r\n"
                                 "Content-Length: 0\r\n"
                                 "\r\n";
+                            // svuoto il buffer perchè non mi serve
+                            while((ret = recv(fd, buffer, sizeof(buffer), MSG_DONTWAIT) != -1 && errno != EWOULDBLOCK));
                             // invio la risposta di errore
-                            if(send(fd, response, sizeof(response)-1, 0) < 0){
+                            if(send(fd, response, sizeof(response) - 1, 0) < 0){
                                 fprintf(stderr, "%s:%d send error: %s\r\n", __FILE__, __LINE__, strerror(errno));
                                 break;
                             } 
@@ -440,7 +444,7 @@ static void* http_server_run(void* arg){
                             }
                             // Aggiungo il nuovo contesto della richiesta da processare
                             this->_data = &request;
-                            // rimuovo il socket dal set
+                            // rimuovo il socket dal set perchè verrà chiuso all'interno del worker
                             FD_CLR(fd, &this->_master_set);
                             if((ret = pthread_mutex_unlock(&this->_mutex_sync)) != 0){
                                 fprintf(stderr, "%s:%d pthread_mutex_unlock error: %s\r\n",__FILE__, __LINE__, strerror(ret));
@@ -452,23 +456,23 @@ static void* http_server_run(void* arg){
                                 break;
                             }
                             pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &state);
-                            // Il socket verrà chiuso all'interno del worker
-                            continue;
                         }
-                    } else if(recved < 0){
+                    } else // se la connesione è stata chiusa
+                    if(recved == 0){
+                        if(getpeername(fd, (struct sockaddr *)&addr, &(socklen_t){sizeof(addr)}) == 0){
+                            printf("%s:%d \x1b[31mdisconnected\x1b[0m\r\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
+                        } else fprintf(stderr, "%s:%d getpeername error: %s\r\n", __FILE__, __LINE__, strerror(errno));
+
+                        // rimuovo il socket dal set
+                        FD_CLR(fd, &this->_master_set);
+                        // chiudo la connessione
+                        if(close(fd) != 0){
+                            fprintf(stderr, "%s:%d close error: %s\r\n", __FILE__, __LINE__, strerror(errno));
+                            break;
+                        }
+                    } else // se c'e stato un errore
+                    if(recved < 0){
                         fprintf(stderr, "%s:%d recv error: %s\r\n", __FILE__, __LINE__, strerror(errno));
-                        break;
-                    } 
-
-                    if(getpeername(fd, (struct sockaddr *)&addr, &(socklen_t){sizeof(addr)}) == 0){
-                        printf("%s:%d \x1b[31mdisconnected\x1b[0m\r\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
-                    } else fprintf(stderr, "%s:%d getpeername error: %s\r\n", __FILE__, __LINE__, strerror(errno));
-
-                    // rimuovo il socket dal set
-                    FD_CLR(fd, &this->_master_set);
-                    // chiudo la connessione
-                    if(close(fd) != 0){
-                        fprintf(stderr, "%s:%d close error: %s\r\n", __FILE__, __LINE__, strerror(errno));
                         break;
                     }
                 }
