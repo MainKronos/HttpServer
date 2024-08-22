@@ -101,41 +101,60 @@ int send_http_response(int socket, enum http_status status, const char* header, 
  * @param socket File Descriptor del socket
  * @param data puntatore a memoria dati definita dall'utente
  * @return Ritorna 0 se non ci sono stati errori
- * @warning È possibile che i dati puntati da data vengano letti/modificati da più thread
+ * @warning È possibile che i dati puntati da `data` vengano letti/modificati da più thread
  */
 typedef int(*HttpCallback)(int socket, void* data);
 
-/** Struttura utilizzata per morizzare tutti gli handler */
+/** Struttura utilizzata per memorizzare tutti gli handler */
 struct HttpHandler {
-    /* PRIVATE */
-    HttpCallback _callback; /* funzione da chiamare in caso di match */
-    const char* _url; /* url di match*/
-    void* _data; /* puntatore a memoria dati definita dall'utente */
+    /** @privatesection */
+
+    /** funzione da chiamare in caso di match */
+    HttpCallback _callback; 
+    /** url di match*/
+    const char* _url; 
+    /** puntatore a memoria dati definita dall'utente */
+    void* _data; 
 };
 
 /** Stati del server  */
 enum HttpServerState {
-    HTTP_SERVER_STOPPED, /* Server fermo */
-    HTTP_SERVER_INITIALIZED, /* Server inizializzato */
-    HTTP_SERVER_RUNNING, /* Server in esecuzione */
-    HTTP_SERVER_STOPPING, /* Server in spegnimento */
+    /** Server fermo */
+    HTTP_SERVER_STOPPED,
+    /** Server inizializzato */
+    HTTP_SERVER_INITIALIZED,
+    /** Server in esecuzione */
+    HTTP_SERVER_RUNNING,
+    /** Server in spegnimento */
+    HTTP_SERVER_STOPPING
 };
 
 /* HTTP SERVER FUNCTIONS ***********************************************************************************/
 
 /** Struttura del server */
 struct HttpServer {
-    /* PRIVATE */
-    pthread_t _thread; /* Thread del server */
-    int _listener; /* Socket per l'ascolto */
-    struct sockaddr_in _addr; /* Indirizzo server */
-    enum HttpServerState _state; /* Indica lo stato del server */
-    fd_set _master_set; /* Set con tutti i descrittori */
-    struct HttpHandler _handlers[HTTP_MAX_HANDLERS]; /* lista degli handler */
-    pthread_t _workers[HTTP_MAX_WORKERS]; /* thread dei worker */
-    struct HttpRequest* _data; /* Puntatore per lo scambio di dati tra i thread */
-    pthread_mutex_t _mutex_sync; /* Mutex di sincronizzazione */
-    pthread_cond_t _cond_sync; /* Varaibile cond di sincronizzazione */
+    /** @privatesection */
+
+    /** Thread del server */
+    pthread_t _thread;
+    /** Socket per l'ascolto */
+    int _listener;
+    /** Indirizzo server */
+    struct sockaddr_in _addr; 
+    /** Indica lo stato del server */
+    enum HttpServerState _state; 
+    /** Set con tutti i descrittori */
+    fd_set _master_set; 
+    /** lista degli handler */
+    struct HttpHandler _handlers[HTTP_MAX_HANDLERS]; 
+    /** thread dei worker */
+    pthread_t _workers[HTTP_MAX_WORKERS]; 
+    /** Puntatore per lo scambio di dati tra i thread */
+    struct HttpRequest* _data; 
+    /** Mutex di sincronizzazione */
+    pthread_mutex_t _mutex_sync; 
+    /** Varaibile cond di sincronizzazione */
+    pthread_cond_t _cond_sync; 
 };
 
 /** 
@@ -165,18 +184,18 @@ int http_server_add_handler(struct HttpServer* this, const char* url, HttpCallba
 int http_server_start(struct HttpServer* this);
 
 /** 
- * @brief Attende che il server sia terminato
- * @param this Istanza dell'HttpServer
- * @return Se non ci sono stati errori ritorna 0
-*/
-int http_server_join(struct HttpServer* this);
-
-/** 
  * @brief Termina forzatamente il server
  * @param this Istanza dell'HttpServer
  * @return Se non ci sono stati errori ritorna 0
  */
 int http_server_stop(struct HttpServer* this);
+
+/** 
+ * @brief Attende che il server sia terminato
+ * @param this Istanza dell'HttpServer
+ * @return Se non ci sono stati errori ritorna 0
+*/
+int http_server_join(struct HttpServer* this);
 
 #ifdef __cplusplus
 }
