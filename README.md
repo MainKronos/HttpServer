@@ -7,6 +7,11 @@ Micro http library written in c [UNIX]
 3. Compilare usando il comando `gcc -Ilibraries libraries/http_server.c libraries/http_parser.c main.c`
 4. Enjoy
 
+## Limitazioni
+
+- La connessione viene sempre chiusa dopo che è stato eseguito l'handler della relativa richiesta
+- Se l'url della richiesta supera i 3000 caratteri allora potrebbe NON essere letto nella sua interezza
+
 ## Example
 
 Alcuni esempi di callback si trovano nei file `index.h` e `index.c`.
@@ -23,7 +28,7 @@ int html_index_callback(int socket, void* data){
         "HTTP/1.1 200 OK\r\n"
         "Content-Type: text/html; charset=utf-8\r\n"
         "Content-Length: 5\r\n"
-        "Connection: keep-alive\r\n"
+        "Connection: close\r\n"
         "\r\n"
         "INDEX";
 
