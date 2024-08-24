@@ -121,6 +121,8 @@ struct HttpHandler {
 
 /** Stato della richiesta http */
 enum HttpRequestState {
+    /** @privatesection */
+
     /** Slot richiesta vuoto */
     HTTP_WORKER_REQUEST_EMPTY,
     /** Richiesta pronta per essere processata */
@@ -143,6 +145,8 @@ enum HttpServerState {
 
 /** Struttura per il contesto della richiesta */
 struct HttpRequest {
+    /** @privatesection */
+
     /** Descrittore del socket della comunicazione tcp */
     int socket; 
     /** Stato della richiesta */
