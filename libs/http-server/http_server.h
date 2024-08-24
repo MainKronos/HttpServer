@@ -109,12 +109,14 @@ typedef int(*HttpCallback)(int socket, void* data);
 struct HttpHandler {
     /** @privatesection */
 
-    /** funzione da chiamare in caso di match */
-    HttpCallback _callback; 
+    /** metodo http di match */
+    enum http_method method;
     /** url di match*/
-    const char* _url; 
+    const char* url; 
+    /** funzione da chiamare in caso di match */
+    HttpCallback callback;
     /** puntatore a memoria dati definita dall'utente */
-    void* _data; 
+    void* data; 
 };
 
 /** Stati del server  */
@@ -131,8 +133,6 @@ enum HttpServerState {
 
 /** Stato della richiesta http */
 enum HttpRequestState {
-    /** @privatesection */
-
     /** Slot richiesta vuoto */
     HTTP_WORKER_REQUEST_EMPTY,
     /** Richiesta pronta per essere processata */
@@ -147,14 +147,16 @@ struct HttpRequest {
 
     /** Descrittore del socket della comunicazione tcp */
     int socket; 
-    /** lista degli handler */
-    const struct HttpHandler* handlers; 
-    /** funzione da chiamare in caso di match */
-    HttpCallback callback;
-    /** puntatore a memoria dati definita dall'utente in caso di match */
-    void* data;
     /** Stato della richiesta */
     enum HttpRequestState state;
+    union {
+        /** lista degli handler */
+        const struct HttpHandler* handlers; 
+        /** handler che ha fatto match */
+        const struct HttpHandler* handler; 
+    } ptr;
+    /** puntatore a memoria dati definita dall'utente in caso di match */
+    void* data;
 };
 
 
@@ -198,12 +200,13 @@ int http_server_init(struct HttpServer* this, const char address[], uint16_t por
 /** 
  * @brief Aggiunge un handler al server 
  * @param this Istanza dell'HttpServer
+ * @param method Metodo http di match
  * @param url Url di match
  * @param callback Funzione da chiamare in caso di match
  * @param data Puntatore ad un'allocazione di memoria definita dall'utente (Questo puntatore verrà passato come parametro al callback)
  * @return Se non ci sono stati errori ritorna 0
 */
-int http_server_add_handler(struct HttpServer* this, const char* url, HttpCallback callback, void* data);
+int http_server_add_handler(struct HttpServer* this, enum http_method method, const char* url, HttpCallback callback, void* data);
 
 /** 
  * @brief Avvia il server 

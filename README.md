@@ -42,7 +42,7 @@ int main(){
     struct HttpServer server;
 
     if(http_server_init(&server, "127.0.0.1", 8080)) return -1;
-    if(http_server_add_handler(&server, "/", html_index_callback, NULL)) return -1;
+    if(http_server_add_handler(&server, HTTP_GET, "/", html_index_callback, NULL)) return -1;
     if(http_server_start(&server)) return -1;
 
     /* other jobs */

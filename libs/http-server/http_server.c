@@ -83,6 +83,8 @@ int send_http_response(int socket, enum http_status status, const char* header, 
         return -1;
     }
 
+    size = ret;
+
     // Invio l'header
     sent = 0;
     do {
@@ -102,7 +104,7 @@ int send_http_response(int socket, enum http_status status, const char* header, 
     sent = 0;
     do {
         ret = send(socket, content + sent, content_lenght - sent, 0);
-        if(ret<0) return -1;
+        if(ret < 0) return -1;
         sent += ret;
     } while (sent < content_lenght);
 
@@ -288,7 +290,7 @@ static void* http_worker_run(void* arg){
             }
             
             // Eseguo la callback
-            request->callback(request->socket, request->data);
+            request->ptr.handler->callback(request->socket, request->ptr.handler->data);
 
             // Controllo se il socket è stato chiuso erroneamente nella callback
             if(fcntl(request->socket, F_GETFL) != -1 || errno != EBADF){
@@ -349,7 +351,7 @@ static void* http_server_run(void* arg){
     // Pulisco il set
     FD_ZERO(&temp_set);
 
-    while(1){
+    while(true){
         // Copio il set
         temp_set = this->_master_set;
 
@@ -382,7 +384,7 @@ static void* http_server_run(void* arg){
 
                         // Pulisco il contesto della richiesta
                         memset(&request, 0, sizeof(request));
-                        request.handlers = this->_handlers;
+                        request.ptr.handlers = this->_handlers;
                         request.socket = fd;
 
                         // inizializzo il parser
@@ -392,53 +394,9 @@ static void* http_server_run(void* arg){
 
                         http_parser_execute(&parser, &settings, buffer, recved);
 
-                        // Se c'è stato un errore
-                        if(HTTP_PARSER_ERRNO(&parser)){
-                            char response[512];
-                            fprintf(
-                                stderr, "%s:%d [%s] %s\r\n", 
-                                inet_ntoa(addr.sin_addr), 
-                                ntohs(addr.sin_port), 
-                                http_errno_name(HTTP_PARSER_ERRNO(&parser)),
-                                http_errno_description(HTTP_PARSER_ERRNO(&parser))
-                            );
-                            ret = snprintf(
-                                response, 
-                                sizeof(response),
-                                "HTTP/1.1 500 Internal Server Error\r\n"
-                                "Content-Type: text/html; charset=utf-8\r\n"
-                                "Connection: keep-alive\r\n"
-                                "Content-Length: %ld\r\n"
-                                "\r\n"
-                                "[%s] %s",
-                                strlen(http_errno_name(HTTP_PARSER_ERRNO(&parser))) + strlen(": ") + strlen(http_errno_description(HTTP_PARSER_ERRNO(&parser))),
-                                http_errno_name(HTTP_PARSER_ERRNO(&parser)),
-                                http_errno_description(HTTP_PARSER_ERRNO(&parser))
-                            );
-                            // svuoto il buffer perchè non mi serve
-                            while((ret = recv(fd, buffer, sizeof(buffer), MSG_DONTWAIT) != -1 && errno != EWOULDBLOCK));
-                            // invio la risposta di errore
-                            if(send(fd, response, ret, 0) < 0){
-                                fprintf(stderr, "%s:%d send error: %s\r\n", __FILE__, __LINE__, strerror(errno));
-                                break;
-                            } 
-                        } else 
-                        // Se non è stato trovato nessun handler
-                        if(request.callback == NULL){
-                            char response[] = 
-                                "HTTP/1.1 404 Not Found\r\n"
-                                "Content-Type: text/html; charset=utf-8\r\n"
-                                "Connection: keep-alive\r\n"
-                                "Content-Length: 0\r\n"
-                                "\r\n";
-                            // svuoto il buffer perchè non mi serve
-                            while((ret = recv(fd, buffer, sizeof(buffer), MSG_DONTWAIT) != -1 && errno != EWOULDBLOCK));
-                            // invio la risposta di errore
-                            if(send(fd, response, sizeof(response) - 1, 0) < 0){
-                                fprintf(stderr, "%s:%d send error: %s\r\n", __FILE__, __LINE__, strerror(errno));
-                                break;
-                            } 
-                        } else {
+                        // Se non c'è stata un errore ed è stato trovato un handler 
+                        // con lo stesso metodo della richiesta
+                        if(HTTP_PARSER_ERRNO(&parser) == HPE_OK && request.ptr.handler != NULL && request.ptr.handler->method == parser.method){
                             /** Slot libero per la richiesta */
                             int slot;
 
@@ -483,6 +441,72 @@ static void* http_server_run(void* arg){
                                 break;
                             }
                             pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &state);
+                        }else{
+                            // svuoto il buffer perchè non mi serve
+                            while((ret = recv(fd, buffer, sizeof(buffer), MSG_DONTWAIT) != -1 && errno != EWOULDBLOCK));
+
+                            // Se c'è stato un errore
+                            if(HTTP_PARSER_ERRNO(&parser)){
+                                fprintf(
+                                    stderr, "%s:%d [%s] %s\r\n", 
+                                    inet_ntoa(addr.sin_addr), 
+                                    ntohs(addr.sin_port), 
+                                    http_errno_name(HTTP_PARSER_ERRNO(&parser)),
+                                    http_errno_description(HTTP_PARSER_ERRNO(&parser))
+                                );
+                                snprintf(
+                                    buffer, 
+                                    sizeof(buffer),
+                                    "HTTP/1.1 %d %s\r\n"
+                                    "Content-Type: text/html; charset=utf-8\r\n"
+                                    "Connection: keep-alive\r\n"
+                                    "Content-Length: %ld\r\n"
+                                    "\r\n"
+                                    "[%s] %s",
+                                    HTTP_STATUS_INTERNAL_SERVER_ERROR,
+                                    http_status_str(HTTP_STATUS_INTERNAL_SERVER_ERROR),
+                                    strlen(http_errno_name(HTTP_PARSER_ERRNO(&parser))) + strlen("[] ") + strlen(http_errno_description(HTTP_PARSER_ERRNO(&parser))),
+                                    http_errno_name(HTTP_PARSER_ERRNO(&parser)),
+                                    http_errno_description(HTTP_PARSER_ERRNO(&parser))
+                                );
+                            } else
+                            // Se non è stato trovato nessun handler
+                            if(request.ptr.handler == NULL) {
+                                snprintf(
+                                    buffer,
+                                    sizeof(buffer),
+                                    "HTTP/1.1 %d %s\r\n"
+                                    "Content-Type: text/html; charset=utf-8\r\n"
+                                    "Connection: keep-alive\r\n"
+                                    "Content-Length: 0\r\n"
+                                    "\r\n",
+                                    HTTP_STATUS_NOT_FOUND,
+                                    http_status_str(HTTP_STATUS_NOT_FOUND)
+                                );
+                            } else 
+                            // Se è stato trovato un handler ma il metodo è diverso
+                            if(request.ptr.handler->method != parser.method) {
+                                snprintf(
+                                    buffer,
+                                    sizeof(buffer),
+                                    "HTTP/1.1 %d %s\r\n"
+                                    "Content-Type: text/html; charset=utf-8\r\n"
+                                    "Connection: keep-alive\r\n"
+                                    "Content-Length: 0\r\n"
+                                    "\r\n",
+                                    HTTP_STATUS_METHOD_NOT_ALLOWED,
+                                    http_status_str(HTTP_STATUS_METHOD_NOT_ALLOWED)
+                                );
+                            } else {
+                                // Errore critico non gestito
+                                break;
+                            }
+
+                            // invio la risposta di errore
+                            if(send(fd, buffer, strlen(buffer), 0) < 0){
+                                fprintf(stderr, "%s:%d send error: %s\r\n", __FILE__, __LINE__, strerror(errno));
+                                break;
+                            }
                         }
                     } else // se la connesione è stata chiusa
                     if(recved == 0){
@@ -587,29 +611,38 @@ int http_server_join(struct HttpServer* this){
     return -1;
 }
 
-int http_server_add_handler(struct HttpServer* this, const char* url, HttpCallback callback, void* data){
+int http_server_add_handler(struct HttpServer* this, enum http_method method, const char* url, HttpCallback callback, void* data){
     // Check iniziali
     if(this == NULL) return -1;
     if(url == NULL) return -1;
     if(callback == NULL) return -1;
+    if(this->_state != HTTP_SERVER_INITIALIZED) return -1;
 
     for(int i=0; i<HTTP_MAX_HANDLERS; i++){
         // se ho trovato uno slot libero
-        if(this->_handlers[i]._callback == NULL){
-            this->_handlers[i]._url = url;
-            this->_handlers[i]._callback = callback;
-            this->_handlers[i]._data = data;
+        if(this->_handlers[i].callback == NULL && this->_handlers[i].url == NULL){
+            this->_handlers[i].method = method;
+            this->_handlers[i].url = url;
+            this->_handlers[i].callback = callback;
+            this->_handlers[i].data = data;
             return 0;
+        }else if(this->_handlers[i].method == method && (this->_handlers[i].url == url || strcmp(this->_handlers[i].url, url) == 0)){
+            // Errore logico
+            // Non ha senso che la coppia metodo e url sia collegata a più funzioni
+            // perchè non ci sarebbe modo di sapere quale chiamare
+            // nel caso ci fosse un match
+            return -1;
         }
     }
     return -1;
 }
 
 static int http_parser_on_url(http_parser* parser, const char *at, size_t length){
-    struct HttpRequest* requests = (struct HttpRequest*)parser->data; /* Contesto */
+    struct HttpRequest* request = (struct HttpRequest*)parser->data; /* Contesto */
     struct sockaddr_in addr; /* Indirizzo client */
     struct http_parser_url parser_url; /* Url parser */
     int ret; /* Valore di ritorno */
+    const struct HttpHandler* handler; /* Handler che ha fatto match */
 
     // inizializzo l'url parser
     http_parser_url_init(&parser_url);
@@ -617,23 +650,30 @@ static int http_parser_on_url(http_parser* parser, const char *at, size_t length
     if(ret != 0) return -1;
     
     // Stampo la richiesta ricevuto dal client
-    if(getpeername(requests->socket, (struct sockaddr *)&addr, &(socklen_t){sizeof(addr)}) == 0){
+    if(getpeername(request->socket, (struct sockaddr *)&addr, &(socklen_t){sizeof(addr)}) == 0){
         printf("%s:%d %s %.*s\r\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port), http_method_str(parser->method), (int)length, at);
     } else fprintf(stderr, "%s:%d getpeername error: %s\r\n", __FILE__, __LINE__, strerror(errno));
     
+    handler = NULL;
+
     // scorro tutti gli handler
     for(int i=0; i<HTTP_MAX_HANDLERS; i++){
         // se lo slot è valido
-        if(requests->handlers[i]._callback != NULL){
-            if(strlen(requests->handlers[i]._url) != parser_url.field_data[UF_PATH].len) continue;
-            ret = strncmp(requests->handlers[i]._url, at + parser_url.field_data[UF_PATH].off, parser_url.field_data[UF_PATH].len);
+        if(request->ptr.handlers[i].callback != NULL){
+            if(strlen(request->ptr.handlers[i].url) != parser_url.field_data[UF_PATH].len) continue;
+            ret = strncmp(request->ptr.handlers[i].url, at + parser_url.field_data[UF_PATH].off, parser_url.field_data[UF_PATH].len);
             if(ret != 0) continue;
-            // aggiorno il contesto della callback
-            requests->callback = requests->handlers[i]._callback;
-            requests->data = requests->handlers[i]._data;
-            return 0;
+
+            // mi salvo il puntatore per indicare che l'url ha fatto match
+            handler = &request->ptr.handlers[i];
+
+            // se il metodo è quello giusto mi fermo
+            if(handler->method == parser->method) break;
         }
     }
+
+    // aggiorno il puntatore
+    request->ptr.handler = handler;
     return 0;
 }
 
