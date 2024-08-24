@@ -252,7 +252,7 @@ static void* http_worker_run(void* arg){
 
     pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &state);
 
-    while(1){
+    while(true){
         // Resetto il puntatore
         request = NULL;
 

@@ -45,21 +45,38 @@ extern "C" {
 #include <stdbool.h>
 #include <pthread.h>
 
+/**
+ * @defgroup Http_Server
+ * @brief Modulo che gestisce le connessioni http in entrata/uscita
+ */
+
+/**
+ * @defgroup Http_Utility
+ * @brief Modulo contenente funzioni di utilità per la gestione delle richieste/rispose http
+ */
+
 /* GLOBAL DEFINITION *****************************************************************/
 
 #ifndef HTTP_MAX_HANDLERS
-/** Numero massimo di handlers */
+/** 
+ * @ingroup Http_Server 
+ * @brief Numero massimo di handlers 
+ */
 #define HTTP_MAX_HANDLERS 128
 #endif
 
 #ifndef HTTP_MAX_WORKERS
-/** Numero massimo di worker */
+/** 
+ * @ingroup Http_Server
+ * @brief Numero massimo di worker 
+ */
 #define HTTP_MAX_WORKERS 4
 #endif
 
 /* UTILITY FUNCTIONS ************************************************************************/
 
 /** 
+ * @ingroup Http_Utility
  * @brief Importa un file all'interno del codice.
  * @param file Percorso del file da includere
  * @param sym Simbolo da usare per creare il puntatore al file 
@@ -84,6 +101,7 @@ extern __attribute__((aligned(16))) const size_t _sizeof_ ## sym; \
 extern __attribute__((aligned(16))) __attribute__((nonstring)) const char sym[]
 
 /** 
+ * @ingroup Http_Utility
  * @brief Invia una risposta HTTP/1.1
  * @param socket Socket tcp dove inviare i dati
  * @param status Stato HTTP della risposta
@@ -97,6 +115,7 @@ int send_http_response(int socket, enum http_status status, const char* header, 
 /* HTTP SERVER TYPES ***************************************************************************/
 
 /** 
+ * @ingroup Http_Server
  * @brief Funzione di callback
  * @param socket File Descriptor del socket
  * @param data puntatore a memoria dati definita dall'utente
@@ -131,7 +150,10 @@ enum HttpRequestState {
     HTTP_WORKER_REQUEST_RUNNING
 };
 
-/** Stati del server  */
+/** 
+ * @ingroup Http_Server
+ * @brief Stati del server 
+ */
 enum HttpServerState {
     /** Server fermo */
     HTTP_SERVER_STOPPED,
@@ -162,7 +184,10 @@ struct HttpRequest {
 
 /* HTTP SERVER FUNCTIONS ***********************************************************************************/
 
-/** Struttura del server */
+/** 
+ * @ingroup Http_Server
+ * @brief Struttura del server 
+ */
 struct HttpServer {
     /* READ-ONLY */
 
@@ -192,15 +217,18 @@ struct HttpServer {
 };
 
 /** 
+ * @ingroup Http_Server
  * @brief Inizializza la struttura Server 
  * @param this Istanza dell'HttpServer
  * @param address IP server (NULL = "0.0.0.0")
  * @param port Porta del server
  * @return 0 se non ci sono stati errori
+ * @note Funzione NON bloccante
 */
 int http_server_init(struct HttpServer* this, const char address[], uint16_t port);
 
 /** 
+ * @ingroup Http_Server
  * @brief Aggiunge un handler al server 
  * @param this Istanza dell'HttpServer
  * @param method Metodo http di match
@@ -208,27 +236,34 @@ int http_server_init(struct HttpServer* this, const char address[], uint16_t por
  * @param callback Funzione da chiamare in caso di match
  * @param data Puntatore ad un'allocazione di memoria definita dall'utente (Questo puntatore verrà passato come parametro al callback)
  * @return 0 se non ci sono stati errori
+ * @note Funzione NON bloccante
 */
 int http_server_add_handler(struct HttpServer* this, enum http_method method, const char* url, HttpCallback callback, void* data);
 
 /** 
+ * @ingroup Http_Server
  * @brief Avvia il server 
  * @param this Istanza dell'HttpServer
  * @return 0 se non ci sono stati errori
+ * @note Funzione NON bloccante
 */
 int http_server_start(struct HttpServer* this);
 
 /** 
+ * @ingroup Http_Server
  * @brief Termina forzatamente il server
  * @param this Istanza dell'HttpServer
  * @return 0 se non ci sono stati errori
+ * @note Funzione NON bloccante
  */
 int http_server_stop(struct HttpServer* this);
 
 /** 
+ * @ingroup Http_Server
  * @brief Attende che il server sia terminato
  * @param this Istanza dell'HttpServer
  * @return 0 se non ci sono stati errori
+ * @note Funzione bloccante
 */
 int http_server_join(struct HttpServer* this);
 
