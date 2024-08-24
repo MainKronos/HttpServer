@@ -9,7 +9,6 @@
 
 /*** PRIVATE *******************************************************************/
 
-
 /** 
  * @brief Funzione chiamata quando il parser trova un url
  * @param parser Istanza http_parser
@@ -135,7 +134,11 @@ int http_server_init(struct HttpServer* this, const char address[], uint16_t por
                 // Creazione indirizzo
                 memset(&this->_addr, 0, sizeof(this->_addr));
                 this->_addr.sin_family = AF_INET;
-                inet_pton(AF_INET, address ? address : "0.0.0.0", &this->_addr.sin_addr);
+                if(address == NULL){
+                    this->_addr.sin_addr.s_addr = INADDR_ANY;
+                } else {
+                    inet_pton(AF_INET, address, &this->_addr.sin_addr);
+                }
                 this->_addr.sin_port = htons(port);
 
                 // Aggancio del socket all'indirizzo
@@ -145,7 +148,7 @@ int http_server_init(struct HttpServer* this, const char address[], uint16_t por
                         // Aggiungo il listener al set
                         FD_SET(this->_listener, &this->_master_set);
                         // Aggiorno lo stato del server
-                        this->_state = HTTP_SERVER_INITIALIZED;
+                        this->state = HTTP_SERVER_INITIALIZED;
                         return 0;
                     } else fprintf(stderr, "%s:%d listen error: %s\r\n", __FILE__, __LINE__, strerror(errno));
                 } else fprintf(stderr, "%s:%d bind error: %s\r\n", __FILE__, __LINE__, strerror(errno));
@@ -162,7 +165,7 @@ int http_server_stop(struct HttpServer* this){
     int ret;
     // Check iniziali
     if(this == NULL) return -1;
-    if(this->_state != HTTP_SERVER_RUNNING) return -1;
+    if(this->state != HTTP_SERVER_RUNNING) return -1;
     if(this->_listener < 0) return -1;
 
     printf("%s:%d stopping...\r\n", inet_ntoa(this->_addr.sin_addr), ntohs(this->_addr.sin_port));
@@ -199,7 +202,7 @@ static void http_server_cleanup(void* arg){
     }
 
     // Indico che il server si stà spegnendo
-    this->_state = HTTP_SERVER_STOPPING;
+    this->state = HTTP_SERVER_STOPPING;
     if((ret = pthread_mutex_unlock(&this->_mutex_sync)) != 0){
         fprintf(stderr, "%s:%d pthread_mutex_unlock error: %s\r\n", __FILE__, __LINE__, strerror(ret));
     }
@@ -237,7 +240,7 @@ static void http_server_cleanup(void* arg){
     printf("%s:%d stopped\r\n", inet_ntoa(this->_addr.sin_addr), ntohs(this->_addr.sin_port));
 
     // Indico che il server si è fermato
-    this->_state = HTTP_SERVER_STOPPED;
+    this->state = HTTP_SERVER_STOPPED;
 }
 
 static void* http_worker_run(void* arg){
@@ -267,7 +270,7 @@ static void* http_worker_run(void* arg){
                 } 
             }
             // se  ho trovato uno slot libero o il server si stà spegnendo
-            if(request != NULL || this->_state == HTTP_SERVER_STOPPING) break;
+            if(request != NULL || this->state == HTTP_SERVER_STOPPING) break;
 
             // Attendo
             if((ret = pthread_cond_wait(&this->_cond_sync, &this->_mutex_sync)) != 0){
@@ -277,7 +280,7 @@ static void* http_worker_run(void* arg){
         }
 
         // Se c'è stato un errore o il server si stà spegnendo
-        if(request == NULL || this->_state == HTTP_SERVER_STOPPING){
+        if(request == NULL || this->state == HTTP_SERVER_STOPPING){
             if((ret = pthread_mutex_unlock(&this->_mutex_sync)) != 0){
                 fprintf(stderr, "%s:%d pthread_mutex_unlock error: %s\r\n", __FILE__, __LINE__, strerror(ret));
             }
@@ -381,7 +384,6 @@ static void* http_server_run(void* arg){
 
                     // Controllo se la connessione è stata chiusa o c'è stato un errore
                     if(recved > 0){
-
                         // Pulisco il contesto della richiesta
                         memset(&request, 0, sizeof(request));
                         request.ptr.handlers = this->_handlers;
@@ -394,9 +396,9 @@ static void* http_server_run(void* arg){
 
                         http_parser_execute(&parser, &settings, buffer, recved);
 
-                        // Se non c'è stata un errore ed è stato trovato un handler 
-                        // con lo stesso metodo della richiesta
-                        if(HTTP_PARSER_ERRNO(&parser) == HPE_OK && request.ptr.handler != NULL && request.ptr.handler->method == parser.method){
+                        // Se non c'è stata un errore, la versione http è supportata 
+                        // ed è stato trovato un handler con lo stesso metodo della richiesta
+                        if(HTTP_PARSER_ERRNO(&parser) == HPE_OK && parser.http_major == 1 && request.ptr.handler != NULL && request.ptr.handler->method == parser.method){
                             /** Slot libero per la richiesta */
                             int slot;
 
@@ -468,6 +470,20 @@ static void* http_server_run(void* arg){
                                     strlen(http_errno_name(HTTP_PARSER_ERRNO(&parser))) + strlen("[] ") + strlen(http_errno_description(HTTP_PARSER_ERRNO(&parser))),
                                     http_errno_name(HTTP_PARSER_ERRNO(&parser)),
                                     http_errno_description(HTTP_PARSER_ERRNO(&parser))
+                                );
+                            } else
+                            // Se la richiesta usa un protocollo http non supportato
+                            if(parser.http_major != 1) {
+                                snprintf(
+                                    buffer,
+                                    sizeof(buffer),
+                                    "HTTP/1.1 %d %s\r\n"
+                                    "Content-Type: text/html; charset=utf-8\r\n"
+                                    "Connection: keep-alive\r\n"
+                                    "Content-Length: 0\r\n"
+                                    "\r\n",
+                                    HTTP_STATUS_HTTP_VERSION_NOT_SUPPORTED,
+                                    http_status_str(HTTP_STATUS_HTTP_VERSION_NOT_SUPPORTED)
                                 );
                             } else
                             // Se non è stato trovato nessun handler
@@ -547,7 +563,7 @@ int http_server_start(struct HttpServer* this){
     void* tmp;
     // Check iniziali
     if(this == NULL) return -1;
-    if(this->_state != HTTP_SERVER_INITIALIZED) return -1;
+    if(this->state != HTTP_SERVER_INITIALIZED) return -1;
 
     for(i = 0; i < HTTP_MAX_WORKERS; i++){
         if((ret = pthread_create(&this->_workers[i], NULL, http_worker_run, (void*)this)) != 0){
@@ -559,7 +575,7 @@ int http_server_start(struct HttpServer* this){
     if(i == HTTP_MAX_WORKERS){
         if((ret = pthread_create(&this->_thread, NULL, http_server_run, (void*)this)) == 0){
             printf("%s:%d started\r\n", inet_ntoa(this->_addr.sin_addr), ntohs(this->_addr.sin_port));
-            this->_state = HTTP_SERVER_RUNNING;
+            this->state = HTTP_SERVER_RUNNING;
             return 0;
         }else fprintf(stderr, "%s:%d pthread_create error: %s\r\n", __FILE__, __LINE__, strerror(ret));
     }else{
@@ -567,7 +583,7 @@ int http_server_start(struct HttpServer* this){
             fprintf(stderr, "%s:%d pthread_mutex_lock error: %s\r\n", __FILE__, __LINE__, strerror(ret));
         }
         // Indico che il server si stà spegnendo
-        this->_state = HTTP_SERVER_STOPPING;
+        this->state = HTTP_SERVER_STOPPING;
         if((ret = pthread_mutex_unlock(&this->_mutex_sync)) != 0){
             fprintf(stderr, "%s:%d pthread_mutex_unlock error: %s\r\n", __FILE__, __LINE__, strerror(ret));
         }
@@ -602,7 +618,7 @@ int http_server_join(struct HttpServer* this){
 
     // Check iniziali
     if(this == NULL) return -1;
-    if(this->_state == HTTP_SERVER_INITIALIZED) return -1;
+    if(this->state == HTTP_SERVER_INITIALIZED) return -1;
 
     if((ret = pthread_join(this->_thread, &tmp)) == 0){
         memset(this, 0, sizeof(*this));
@@ -616,7 +632,7 @@ int http_server_add_handler(struct HttpServer* this, enum http_method method, co
     if(this == NULL) return -1;
     if(url == NULL) return -1;
     if(callback == NULL) return -1;
-    if(this->_state != HTTP_SERVER_INITIALIZED) return -1;
+    if(this->state != HTTP_SERVER_INITIALIZED) return -1;
 
     for(int i=0; i<HTTP_MAX_HANDLERS; i++){
         // se ho trovato uno slot libero

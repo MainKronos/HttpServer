@@ -13,22 +13,68 @@
     <main>
         <article id="unit_test">
             <h2>UNIT TEST</h2>
-            <ul>
-                <li><a href="/test/0" target="_blank">TEST 0</a>: <span>loading...</span></li>
-                <li><a href="/test/1" target="_blank">TEST 1</a>: <span>loading...</span></li>
-                <li><a href="/test/2" target="_blank">TEST 2</a>: <span>loading...</span></li>
-                <li><a href="/test/3" target="_blank">TEST 3</a>: <span>loading...</span></li>
-                <li><a href="/test/4" target="_blank">TEST 4</a>: <span>loading...</span></li>
-                <li><a href="/test/5" target="_blank">TEST 5</a>: <span>loading...</span></li>
-                <li><a href="/test/6" target="_blank">TEST 6</a>: <span>loading...</span></li>
-                <li><a href="/test/7" target="_blank">TEST 7</a>: <span>loading...</span></li>
-            </ul>
+            <details>
+                <summary><a href="/test/0" target="_blank">TEST 0</a>: <span>-</span></summary>
+                Questo test usa una callback che preleva tutta i dati in arrivo dal socket
+            </details>
+            <details>
+                <summary><a href="/test/1" target="_blank">TEST 1</a>: <span>-</span></summary>
+                Questo test usa una callback che non preleva dati in arrivo dal socket
+            </details>
+            <details>
+                <summary><a href="/test/2" target="_blank">TEST 2</a>: <span>-</span></summary>
+                Questo test usa una callback che preleva parzialmente [10 byte] i dati in arrivo dal socket
+            </details>
+            <details>
+                <summary><a href="/test/3" target="_blank">TEST 3</a>: <span>-</span></summary>
+                Questo test usa una callback che chiude il socket
+            </details>
+            <details>
+                <summary><a href="/test/4" target="_blank">TEST 4</a>: <span>-</span></summary>
+                Questo test usa una callback che invia (con un unico pacchetto tcp) più byte rispetto a quelli dichiarati nel Content-Length (32 invece di 20)
+            </details>
+            <details>
+                <summary><a href="/test/5" target="_blank">TEST 5</a>: <span>-</span></summary>
+                Questo test usa una callback che invia (con un 2 pacchetto tcp, header e body) più byte rispetto a quelli dichiarati nel Content-Length (32 invece di 20)
+            </details>
+            <details>
+                <summary><a href="/test/6" target="_blank">TEST 6</a>: <span>-</span></summary>
+                Questo test usa una callback che invia (con un unico pacchetto tcp) meno byte rispetto a quelli dichiarati nel Content-Length (32 invece di 50)
+            </details>
+            <details>
+                <summary><a href="/test/7" target="_blank">TEST 7</a>: <span>-</span></summary>
+                Questo test usa una callback che invia (con un 2 pacchetto tcp, header e body) meno byte rispetto a quelli dichiarati nel Content-Length (32 invece di 50)
+            </details>
+            <button>Run</button>
+        </article>
+
+        <article id="regression_test">
+            <h2>REGRESSION TEST</h2>
+            <details>
+                <summary>TEST 0: <span>-</span></summary>
+                Questo test controlla che facendo una richiesta GET su /test ottenga come stato della risposta 200 OK
+            </details>
+            <details>
+                <summary>TEST 1: <span>-</span></summary>
+                Questo test controlla che facendo una richiesta GET su un url non mappato ottenga come stato della risposta 404 Not Found
+            </details>
+            <details>
+                <summary>TEST 2: <span>-</span></summary>
+                Questo test controlla che facendo una richiesta POST su /test ottenga come stato della risposta 405 Method Not Allowed
+            </details>
+            <details>
+                <summary>TEST 3: <span>-</span></summary>
+                Questo test controlla che facendo una richiesta POST su un url non mappato ottenga come stato della risposta 404 Not Found
+            </details>
             <button>Run</button>
         </article>
 
         <article id="performance_test">
             <h2>PERFORMANCE TEST</h2>
-            <pre>TIME: <span></span></pre>
+            <details>
+                <summary>TIME: <span>-</span></summary>
+                Questo test monitora il tempo di risposta di 10 richieste parallele a delle risorse che impiegano un tempo casuale a ripondere 
+            </details>
             <button>Run</button>
         </article>
     </main>
@@ -39,17 +85,16 @@
 
             unit_test.querySelector('button').addEventListener('click', async () => {
                 // reset
-                for (const elem of unit_test.querySelectorAll('li')) {
+                for (const elem of unit_test.querySelectorAll('summary')) {
                     elem.querySelector('a').title = "";
                     elem.querySelector('span').style = "";
-                    elem.querySelector('span').innerText = "loading...";
+                    elem.querySelector('span').innerText = "-";
                 }
 
                 // run
-                for (const elem of unit_test.querySelectorAll('li')) {
+                for (const elem of unit_test.querySelectorAll('summary')) {
                     const res = await fetch(elem.querySelector('a').href);
                     if (res.ok) {
-                        elem.querySelector('a').title = res.headers.get("Content-Description");
                         elem.querySelector('span').innerText = "PASS";
                         elem.querySelector('span').style.color = "green";
                     } else {
@@ -58,6 +103,51 @@
                     }
                 }
 
+            });
+
+            const regression_test = document.getElementById("regression_test");
+
+            regression_test.querySelector('button').addEventListener('click', async () => {
+                // reset
+                for (const elem of regression_test.querySelectorAll('summary')){
+                    elem.querySelector('span').style = "";
+                    elem.querySelector('span').innerText = "-";
+                }
+                let res;
+                
+                // run
+                res = await fetch("/test", {method:"GET"});
+                if(res.status == 200){
+                    regression_test.querySelectorAll('span')[0].innerText = "PASS";
+                    regression_test.querySelectorAll('span')[0].style.color = "green";
+                }else{
+                    regression_test.querySelectorAll('span')[0].innerText = "FAIL";
+                    regression_test.querySelectorAll('span')[0].style.color = "red";
+                }
+                res = await fetch("/NOT_DEFINED", {method:"GET"});
+                if(res.status == 404){
+                    regression_test.querySelectorAll('span')[1].innerText = "PASS";
+                    regression_test.querySelectorAll('span')[1].style.color = "green";
+                }else{
+                    regression_test.querySelectorAll('span')[1].innerText = "FAIL";
+                    regression_test.querySelectorAll('span')[1].style.color = "red";
+                }
+                res = await fetch("/test", {method:"POST"});
+                if(res.status == 405){
+                    regression_test.querySelectorAll('span')[2].innerText = "PASS";
+                    regression_test.querySelectorAll('span')[2].style.color = "green";
+                }else{
+                    regression_test.querySelectorAll('span')[2].innerText = "FAIL";
+                    regression_test.querySelectorAll('span')[2].style.color = "red";
+                }
+                res = await fetch("/NOT_DEFINED", {method:"POST"});
+                if(res.status == 404){
+                    regression_test.querySelectorAll('span')[3].innerText = "PASS";
+                    regression_test.querySelectorAll('span')[3].style.color = "green";
+                }else{
+                    regression_test.querySelectorAll('span')[3].innerText = "FAIL";
+                    regression_test.querySelectorAll('span')[3].style.color = "red";
+                }
             });
 
             const performance_test = document.getElementById("performance_test");

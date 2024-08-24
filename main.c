@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <http_server.h>
 #include "index.h"
+#include "test.h"
 
 static struct HttpServer server;
 
@@ -23,10 +24,10 @@ int main(int argc, char* argv[]) {
 	if(http_server_add_handler(&server, HTTP_GET, "/favicon.ico", ico_favicon_callback, NULL)) return -1;
 
 	if(http_server_add_handler(&server, HTTP_GET, "/stop", close_callback, &server)) return -1;
-	if(http_server_add_handler(&server, HTTP_GET, "/test", html_test_callback, NULL)) return -1;
-	if(http_server_add_handler(&server, HTTP_GET, "/lazy", lazy_image_callback, (void*)10)) return -1;
+	if(http_server_add_handler(&server, HTTP_GET, "/lazy", lazy_image_callback, (void*)5)) return -1;
 	if(http_server_add_handler(&server, HTTP_GET, "/auth", auth_callback, NULL)) return -1;
 
+	if(http_server_add_handler(&server, HTTP_GET, "/test", html_test_callback, NULL)) return -1;
 	if(http_server_add_handler(&server, HTTP_GET, "/test/0", test0_callback, NULL)) return -1;
 	if(http_server_add_handler(&server, HTTP_GET, "/test/1", test1_callback, NULL)) return -1;
 	if(http_server_add_handler(&server, HTTP_GET, "/test/2", test2_callback, NULL)) return -1;

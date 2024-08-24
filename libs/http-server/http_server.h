@@ -100,7 +100,7 @@ int send_http_response(int socket, enum http_status status, const char* header, 
  * @brief Funzione di callback
  * @param socket File Descriptor del socket
  * @param data puntatore a memoria dati definita dall'utente
- * @return Ritorna 0 se non ci sono stati errori
+ * @return 0 se non ci sono stati errori
  * @warning È possibile che i dati puntati da `data` vengano letti/modificati da più thread
  */
 typedef int(*HttpCallback)(int socket, void* data);
@@ -119,6 +119,16 @@ struct HttpHandler {
     void* data; 
 };
 
+/** Stato della richiesta http */
+enum HttpRequestState {
+    /** Slot richiesta vuoto */
+    HTTP_WORKER_REQUEST_EMPTY,
+    /** Richiesta pronta per essere processata */
+    HTTP_WORKER_REQUEST_READY,
+    /** Richiesta in esecuzione */
+    HTTP_WORKER_REQUEST_RUNNING
+};
+
 /** Stati del server  */
 enum HttpServerState {
     /** Server fermo */
@@ -131,20 +141,8 @@ enum HttpServerState {
     HTTP_SERVER_STOPPING
 };
 
-/** Stato della richiesta http */
-enum HttpRequestState {
-    /** Slot richiesta vuoto */
-    HTTP_WORKER_REQUEST_EMPTY,
-    /** Richiesta pronta per essere processata */
-    HTTP_WORKER_REQUEST_READY,
-    /** Richiesta in esecuzione */
-    HTTP_WORKER_REQUEST_RUNNING
-};
-
 /** Struttura per il contesto della richiesta */
 struct HttpRequest {
-    /** @privatesection */
-
     /** Descrittore del socket della comunicazione tcp */
     int socket; 
     /** Stato della richiesta */
@@ -155,8 +153,6 @@ struct HttpRequest {
         /** handler che ha fatto match */
         const struct HttpHandler* handler; 
     } ptr;
-    /** puntatore a memoria dati definita dall'utente in caso di match */
-    void* data;
 };
 
 
@@ -164,27 +160,30 @@ struct HttpRequest {
 
 /** Struttura del server */
 struct HttpServer {
-    /** @privatesection */
+    /* READ-ONLY */
 
-    /** Thread del server */
-    pthread_t _thread;
-    /** Socket per l'ascolto */
-    int _listener;
-    /** Indirizzo server */
-    struct sockaddr_in _addr; 
     /** Indica lo stato del server */
-    enum HttpServerState _state; 
-    /** Set con tutti i descrittori */
+    enum HttpServerState state; 
+
+    /* PRIVATE */
+
+    /** Thread del server @private */
+    pthread_t _thread;
+    /** Socket per l'ascolto @private */
+    int _listener;
+    /** Indirizzo server @private */
+    struct sockaddr_in _addr; 
+    /** Set con tutti i descrittori @private */
     fd_set _master_set; 
-    /** lista degli handler */
+    /** lista degli handler @private */
     struct HttpHandler _handlers[HTTP_MAX_HANDLERS]; 
-    /** thread dei worker */
+    /** thread dei worker @private */
     pthread_t _workers[HTTP_MAX_WORKERS]; 
-    /** Jobs in esecuzione dai worker */
+    /** Jobs in esecuzione dai worker @private */
     struct HttpRequest _requests[HTTP_MAX_WORKERS]; 
-    /** Mutex di sincronizzazione */
+    /** Mutex di sincronizzazione @private */
     pthread_mutex_t _mutex_sync; 
-    /** Varaibile cond di sincronizzazione */
+    /** Varaibile cond di sincronizzazione @private */
     pthread_cond_t _cond_sync; 
 };
 
@@ -193,7 +192,7 @@ struct HttpServer {
  * @param this Istanza dell'HttpServer
  * @param address IP server (NULL = "0.0.0.0")
  * @param port Porta del server
- * @return Se non ci sono stati errori ritorna 0
+ * @return 0 se non ci sono stati errori
 */
 int http_server_init(struct HttpServer* this, const char address[], uint16_t port);
 
@@ -204,28 +203,28 @@ int http_server_init(struct HttpServer* this, const char address[], uint16_t por
  * @param url Url di match
  * @param callback Funzione da chiamare in caso di match
  * @param data Puntatore ad un'allocazione di memoria definita dall'utente (Questo puntatore verrà passato come parametro al callback)
- * @return Se non ci sono stati errori ritorna 0
+ * @return 0 se non ci sono stati errori
 */
 int http_server_add_handler(struct HttpServer* this, enum http_method method, const char* url, HttpCallback callback, void* data);
 
 /** 
  * @brief Avvia il server 
  * @param this Istanza dell'HttpServer
- * @return Se non ci sono stati errori ritorna 0
+ * @return 0 se non ci sono stati errori
 */
 int http_server_start(struct HttpServer* this);
 
 /** 
  * @brief Termina forzatamente il server
  * @param this Istanza dell'HttpServer
- * @return Se non ci sono stati errori ritorna 0
+ * @return 0 se non ci sono stati errori
  */
 int http_server_stop(struct HttpServer* this);
 
 /** 
  * @brief Attende che il server sia terminato
  * @param this Istanza dell'HttpServer
- * @return Se non ci sono stati errori ritorna 0
+ * @return 0 se non ci sono stati errori
 */
 int http_server_join(struct HttpServer* this);
 

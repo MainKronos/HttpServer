@@ -10,7 +10,8 @@ Micro http library written in c [UNIX]
 ## Limitazioni
 
 - La connessione viene sempre chiusa dopo che è stato eseguito l'handler della relativa richiesta
-- Se l'url della richiesta supera i 3000 caratteri allora potrebbe NON essere letto nella sua interezza
+- Se l'url della richiesta viene spezzettato in più pacchetti tcp o la sua lunghezza supera `HTTP_MAX_HEADER_SIZE` allora viene inviato un messaggio di errore (probabilmente un 505)
+- È supportato solo il protocollo http/1.0 e http/1.1 senza tls
 
 ## Example
 
