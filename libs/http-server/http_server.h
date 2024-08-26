@@ -112,15 +112,14 @@ extern __attribute__((aligned(16))) __attribute__((nonstring)) const char sym[]
  */
 int send_http_response(int socket, enum http_status status, const char* header, const char* content, size_t content_lenght);
 
-/**
+/** 
  * @ingroup Http_Utility
- * @brief Recupera una parte dell' url da socket
- * @param socket Socket tcp dove ricevere i dati
- * @param field Campo dell'url
- * @param buffer Buffer dove scrivere il campo trovato
- * @param buffer_size Dimenzione massima del buffer
+ * @brief Trova l'url all'intero della richiesta http
+ * @param buffer Punatore al buffer in cui è contenuta la richiesta http (non è neccessario che sia completa, basta che ci sia almeno url), se l'operazione è andata a buon fine il puntatore punterà all'inizio della stringa dell'url
+ * @param buffer_size Puntatore alla dimenzione del buffer, se l'operazione è andata a buon fine il puntatore punterà alla dimenzione dell'url
+ * @return 0 se non ci sono stati errori
  */
-int http_get_url_field(int socket, enum http_parser_url_fields field, char* buffer, size_t buffer_size);
+int http_request_get_url(const char** buffer, size_t* buffer_size);
 
 /* HTTP SERVER TYPES ***************************************************************************/
 

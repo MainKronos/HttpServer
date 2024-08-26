@@ -9,6 +9,11 @@
 
 /*** PRIVATE *******************************************************************/
 
+struct HttpParserTransferContext {
+    const char *at;
+    size_t length;
+};
+
 /** 
  * @brief Funzione chiamata quando il parser trova un url
  * @param parser Istanza http_parser
@@ -23,7 +28,7 @@ static int http_parser_on_url(http_parser* parser, const char *at, size_t length
  * @param at indirizzo inizio stringa url
  * @param length Lunghezza stringa url
  */
-static int http_get_url_field_on_url(http_parser* parser, const char *at, size_t length);
+static int http_request_get_url_on_url(http_parser* parser, const char *at, size_t length);
 
 /** 
  * @brief Funzione del server 
@@ -45,55 +50,39 @@ static void http_server_cleanup(void* arg);
 
 /******************************************************************************/
 
-static int http_get_url_field_on_url(http_parser* parser, const char *at, size_t length){
-    struct {
-        const char *at; 
-        size_t length
-    } *data = parser->data;
-
+static int http_request_get_url_on_url(http_parser* parser, const char *at, size_t length){
+    struct HttpParserTransferContext* data = (struct HttpParserTransferContext*)parser->data;
     data->at = at;
     data->length = length;
+    return 0;
 }
 
-int http_get_url_field(int socket, enum http_parser_url_fields field, char* buffer, size_t buffer_size){
-    int ret;
-    char request[HTTP_MAX_HEADER_SIZE]; /* Buffer per la richiesta */
+int http_request_get_url(const char** buffer, size_t* buffer_size){
     http_parser parser; /* Istanza http parser */
     http_parser_settings settings; /* Istanza settings del parser */
-    struct http_parser_url parser_url; /* Url parser */
-    struct {
-        const char *at; 
-        size_t length
-    } data;
-    ssize_t recved; /* Bytes ricevuti */
-    size_t size;
+    struct HttpParserTransferContext data; /* Informazioni di trasferimento */
+    
+    // Check iniziali
+    if(buffer == NULL) return -1;
+    if(*buffer == NULL) return -1;
+    if(buffer_size == NULL) return -1;
+    if(*buffer_size == 0) return -1;
 
     // inizializzo i setting del parser
     http_parser_settings_init(&settings);
-    settings.on_url = http_get_url_field_on_url;
+    settings.on_url = http_request_get_url_on_url;
 
     // inizializzo il parser
     http_parser_init(&parser, HTTP_REQUEST);
     // passo il buffer dei dati al parser
     parser.data = (void*)&data;
 
-    // ricevo i dati senza toglierli dallo stream
-    recved = recv(socket, request, sizeof(request), MSG_PEEK);
-    if(recved <= 0) return -1;
-
-    http_parser_execute(&parser, &settings, request, recved);
+    http_parser_execute(&parser, &settings, *buffer, *buffer_size);
     if(HTTP_PARSER_ERRNO(&parser) != HPE_OK) return -1;
 
-    // inizializzo l'url parser
-    http_parser_url_init(&parser_url);
-    ret = http_parser_parse_url(data.at, data.length, false, &parser_url);
-    if(ret != 0) return -1;
-
-    memset(buffer, 0, buffer_size);
-    if(parser_url.field_data[field].len >= buffer_size) size = buffer_size-1;
-    else size = parser_url.field_data[field].len;
-    strncpy(buffer, data.at + parser_url.field_data[field].off, size);
-
+    *buffer = data.at;
+    *buffer_size = data.length;
+    
     return 0;
 }
 
