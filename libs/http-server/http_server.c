@@ -18,6 +18,14 @@
 static int http_parser_on_url(http_parser* parser, const char *at, size_t length);
 
 /** 
+ * @brief Funzione chiamata quando il parser trova un url
+ * @param parser Istanza http_parser
+ * @param at indirizzo inizio stringa url
+ * @param length Lunghezza stringa url
+ */
+static int http_get_url_field_on_url(http_parser* parser, const char *at, size_t length);
+
+/** 
  * @brief Funzione del server 
  * @param arg struct HttpServer*
 */
@@ -36,6 +44,58 @@ static void* http_worker_run(void* arg);
 static void http_server_cleanup(void* arg);
 
 /******************************************************************************/
+
+static int http_get_url_field_on_url(http_parser* parser, const char *at, size_t length){
+    struct {
+        const char *at; 
+        size_t length
+    } *data = parser->data;
+
+    data->at = at;
+    data->length = length;
+}
+
+int http_get_url_field(int socket, enum http_parser_url_fields field, char* buffer, size_t buffer_size){
+    int ret;
+    char request[HTTP_MAX_HEADER_SIZE]; /* Buffer per la richiesta */
+    http_parser parser; /* Istanza http parser */
+    http_parser_settings settings; /* Istanza settings del parser */
+    struct http_parser_url parser_url; /* Url parser */
+    struct {
+        const char *at; 
+        size_t length
+    } data;
+    ssize_t recved; /* Bytes ricevuti */
+    size_t size;
+
+    // inizializzo i setting del parser
+    http_parser_settings_init(&settings);
+    settings.on_url = http_get_url_field_on_url;
+
+    // inizializzo il parser
+    http_parser_init(&parser, HTTP_REQUEST);
+    // passo il buffer dei dati al parser
+    parser.data = (void*)&data;
+
+    // ricevo i dati senza toglierli dallo stream
+    recved = recv(socket, request, sizeof(request), MSG_PEEK);
+    if(recved <= 0) return -1;
+
+    http_parser_execute(&parser, &settings, request, recved);
+    if(HTTP_PARSER_ERRNO(&parser) != HPE_OK) return -1;
+
+    // inizializzo l'url parser
+    http_parser_url_init(&parser_url);
+    ret = http_parser_parse_url(data.at, data.length, false, &parser_url);
+    if(ret != 0) return -1;
+
+    memset(buffer, 0, buffer_size);
+    if(parser_url.field_data[field].len >= buffer_size) size = buffer_size-1;
+    else size = parser_url.field_data[field].len;
+    strncpy(buffer, data.at + parser_url.field_data[field].off, size);
+
+    return 0;
+}
 
 int send_http_response(int socket, enum http_status status, const char* header, const char* content, size_t content_lenght){
     char* buffer; /* Buffer per l'header */
@@ -300,6 +360,10 @@ static void* http_worker_run(void* arg){
                 if(getpeername(request->socket, (struct sockaddr *)&addr, &(socklen_t){sizeof(addr)}) == 0){
                     printf("%s:%d \x1b[31mdisconnected\x1b[0m\r\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
                 } else fprintf(stderr, "%s:%d getpeername error: %s\r\n", __FILE__, __LINE__, strerror(errno));
+
+                if(shutdown(request->socket, SHUT_RDWR) != 0){
+                    fprintf(stderr, "%s:%d shutdown error: %s\r\n", __FILE__, __LINE__, strerror(errno));
+                }
 
                 if(close(request->socket) != 0) {
                     fprintf(stderr, "%s:%d close error: %s\r\n", __FILE__, __LINE__, strerror(errno));
