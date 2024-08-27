@@ -15,5 +15,7 @@ int close_callback(int socket, void* data);
 int lazy_image_callback(int socket, void* data);
 /** Autenticazione tramite Basic Auth */
 int auth_callback(int socket, void* data);
+/** Callback che restituisce nel bosy l'url della richiesta */
+int url_callback(int socket, void* data);
 
 #endif

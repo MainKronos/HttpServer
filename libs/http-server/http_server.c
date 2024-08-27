@@ -9,10 +9,7 @@
 
 /*** PRIVATE *******************************************************************/
 
-struct HttpParserTransferContext {
-    const char *at;
-    size_t length;
-};
+
 
 /** 
  * @brief Funzione chiamata quando il parser trova un url
@@ -49,42 +46,6 @@ static void* http_worker_run(void* arg);
 static void http_server_cleanup(void* arg);
 
 /******************************************************************************/
-
-static int http_request_get_url_on_url(http_parser* parser, const char *at, size_t length){
-    struct HttpParserTransferContext* data = (struct HttpParserTransferContext*)parser->data;
-    data->at = at;
-    data->length = length;
-    return 0;
-}
-
-int http_request_get_url(const char** buffer, size_t* buffer_size){
-    http_parser parser; /* Istanza http parser */
-    http_parser_settings settings; /* Istanza settings del parser */
-    struct HttpParserTransferContext data; /* Informazioni di trasferimento */
-    
-    // Check iniziali
-    if(buffer == NULL) return -1;
-    if(*buffer == NULL) return -1;
-    if(buffer_size == NULL) return -1;
-    if(*buffer_size == 0) return -1;
-
-    // inizializzo i setting del parser
-    http_parser_settings_init(&settings);
-    settings.on_url = http_request_get_url_on_url;
-
-    // inizializzo il parser
-    http_parser_init(&parser, HTTP_REQUEST);
-    // passo il buffer dei dati al parser
-    parser.data = (void*)&data;
-
-    http_parser_execute(&parser, &settings, *buffer, *buffer_size);
-    if(HTTP_PARSER_ERRNO(&parser) != HPE_OK) return -1;
-
-    *buffer = data.at;
-    *buffer_size = data.length;
-    
-    return 0;
-}
 
 int send_http_response(int socket, enum http_status status, const char* header, const char* content, size_t content_lenght){
     char* buffer; /* Buffer per l'header */
